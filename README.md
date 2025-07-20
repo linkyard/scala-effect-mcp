@@ -164,7 +164,7 @@ A minimal example that shows the basic structure of an MCP server with a single 
 - **Basic Structure**: Demonstrates the essential components: `McpServer`, `Session`, and `ToolProvider`
 - **Getting Started**: Perfect for understanding the fundamentals of MCP server implementation
 
-### [DemoMcpServer] (example/demo/src/main/scala/ch/linkyard/mcp/example/demo/DemoMcpServer.scala)
+### [DemoMcpServer](example/demo/src/main/scala/ch/linkyard/mcp/example/demo/DemoMcpServer.scala)
 
 A more complex example that demonstrates all major MCP concepts:
 
