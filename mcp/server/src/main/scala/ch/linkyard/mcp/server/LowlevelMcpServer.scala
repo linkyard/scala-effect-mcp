@@ -28,6 +28,8 @@ import io.circe.DecodingFailure
 
 import java.util.UUID
 
+/** Lower level server that just deals with request/response correlation and does not care about the individual messages
+  */
 trait LowlevelMcpServer[F[_]]:
   def handleRequest(request: ClientRequest): F[ServerResponse]
   def handleNotification(notification: ClientNotification): F[Unit]

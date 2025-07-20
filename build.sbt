@@ -1,5 +1,5 @@
 ThisBuild / scalaVersion := Dependencies.scala
-ThisBuild / organization := "ch.linkyard"
+ThisBuild / organization := "ch.linkyard.mcp"
 ThisBuild / organizationName := "linkyard ag"
 ThisBuild / versionScheme := Some("strict")
 

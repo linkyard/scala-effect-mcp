@@ -5,7 +5,6 @@ import cats.effect.IO
 import cats.effect.IOApp
 import cats.effect.kernel.Resource
 import cats.implicits.*
-import com.melvinlow.json.schema.generic.auto.given
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.jsonrpc2.JsonRpcServer
 import ch.linkyard.mcp.jsonrpc2.transport.StdioJsonRpcConnection
@@ -33,6 +32,7 @@ import ch.linkyard.mcp.server.McpServer.Pageable
 import ch.linkyard.mcp.server.PromptFunction
 import ch.linkyard.mcp.server.ToolFunction
 import ch.linkyard.mcp.server.ToolFunction.Effect
+import com.melvinlow.json.schema.generic.auto.given
 import io.circe.generic.auto.given
 
 import scala.concurrent.duration.DurationInt
