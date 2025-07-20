@@ -17,7 +17,7 @@ libraryDependencies += "ch.linkyard.mcp" %% "jsonrpc2-stdio" % "0.1.0"
 
 ### Writing a Simple Echo Server
 
-Here's a minimal example of an MCP server that provides a simple echo tool:
+Here's a minimal example of an MCP server that provides a simple echo tool (see [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)):
 
 ```scala
 package example
@@ -118,12 +118,71 @@ Additional Considerations:
   * When the client requests cancellation the the server will automatically cancel the IO for the request handling (eg the tool function)
 * Logging
   * Prefer logging via the call context as this will automatically add the logger name
-  * Logging level is automatically applied, only client.log calls that meet the logging level set by the client will be passed on to the client
+  * Logging level is automatically applied, only client.log calls that meet the logging level set by the client will be passed on to the your code
 * Progress:
   * Progress can be reported to the client using the call context
   * Progress logs by the client are not passed on to the your code
 
+## Testing Your MCP Server
 
+The [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) is an interactive developer tool for testing and debugging MCP servers. It provides a comprehensive interface to test all aspects of your server implementation.
+
+### Installation and Usage
+
+The Inspector runs directly through `npx` without requiring installation:
+
+```bash
+npx @modelcontextprotocol/inspector <command>
+```
+
+### Testing Your Server
+
+1. **Build your server:**
+   ```bash
+   sbt assembly
+   ```
+
+2. **Launch the Inspector with your server:**
+   ```bash
+   npx @modelcontextprotocol/inspector java -jar target/scala-3.3.0/your-server-assembly-0.1.0.jar
+   ```
+
+3. **Verify connectivity and capabilities:**
+   - Check that the server connects successfully
+   - Verify that all expected capabilities are negotiated
+   - Review the server information and instructions
+
+## Examples
+
+This library provides two example servers that demonstrate different aspects of MCP functionality:
+
+### [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)
+
+A minimal example that shows the basic structure of an MCP server with a single tool:
+
+- **Single Tool**: Implements a simple echo tool that repeats input text
+- **Basic Structure**: Demonstrates the essential components: `McpServer`, `Session`, and `ToolProvider`
+- **Getting Started**: Perfect for understanding the fundamentals of MCP server implementation
+
+### [DemoMcpServer] (example/demo/src/main/scala/ch/linkyard/mcp/example/demo/DemoMcpServer.scala)
+
+A more complex example that demonstrates all major MCP concepts:
+
+- **Multiple Tools**:
+  - `parrot`: Simple text echo with modification
+  - `adder`: Mathematical operation with progress reporting and logging
+  - `userEmail`: Complex tool using elicitation and sampling to find user emails
+- **Prompts**: Story generation prompt with argument completion
+- **Resources**: Animal database with 20 animals, resource templates, and autocomplete
+- **Advanced Features**: Progress reporting, logging, elicitation, sampling, and completion
+
+This example showcases:
+- How to implement complex workflows using multiple MCP concepts
+- Integration between different features (tools calling elicitation and sampling)
+- Resource management with pagination and templates
+- Error handling and user interaction patterns
+
+Both examples can be built and tested using the MCP Inspector as described in the Testing section above.
 
 ## Project Modules
 
@@ -140,8 +199,5 @@ This project is organized as a multi-module Scala build. The main modules are:
 
 - **mcp/server** (`ch.linkyard.mcp:mcp-server`)
   Implements the core server logic for handling MCP requests and notifications. It provides abstractions for request/response handling, error management, and progress reporting. Depends on both `jsonrpc2` and `mcp/protocol`.
-
-- **example** (`ch.linkyard.mcp:example`)
-  Contains example applications demonstrating how to implement and run an MCP server using the provided modules. It is intended as a reference and for testing purposes. Depends on `mcp/server` and `transport/stdio`.
 
 Each module is defined as an SBT subproject and can be built, tested, and published independently. The modular structure allows for flexible reuse and extension of protocol, transport, and server logic.

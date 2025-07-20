@@ -1,4 +1,4 @@
-package ch.linkyard.mcp.example
+package ch.linkyard.mcp.example.simpleEcho
 
 import cats.effect.ExitCode
 import cats.effect.IO

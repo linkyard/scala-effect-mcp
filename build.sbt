@@ -53,7 +53,8 @@ lazy val root = (project in file("."))
     transportStdio,
     mcpProtocol,
     mcpServer,
-    example,
+    exampleSimpleEcho,
+    exampleDemo,
   )
 
 ThisBuild / commands += Command.command("cleanup") { state =>
@@ -101,15 +102,30 @@ lazy val mcpServer = (project in file("mcp/server"))
     ),
   ).dependsOn(jsonrpc2, mcpProtocol)
 
-lazy val example = (project in file("example"))
+
+lazy val exampleSimpleEcho = (project in file("example/simple-echo"))
   .settings(
-    name := "example",
+    name := "example-simple-echo",
     run / fork := true,
     publish / skip := true,
-    assembly / aggregate := true,
-    assembly / mainClass := Some("ch.linkyard.mcp.example.EchoMcp"),
-    assembly / assemblyJarName := "mcp.jar",
+        assembly / aggregate := true,
+    assembly / mainClass := Some("ch.linkyard.mcp.example.simpleEcho.SimpleEchoServer"),
+    assembly / assemblyJarName := "echo.jar",
     assembly / test := {},
+
+    libraryDependencies ++= Dependencies.logBinding,
+  )
+  .dependsOn(mcpServer, transportStdio)
+
+lazy val exampleDemo = (project in file("example/demo"))
+  .settings(
+    name := "example-demo",
+    run / fork := true,
+    assembly / aggregate := true,
+    assembly / mainClass := Some("ch.linkyard.mcp.example.demo.DemoMcpServer"),
+    assembly / assemblyJarName := "demo.jar",
+    assembly / test := {},
+    publish / skip := true,
     libraryDependencies ++= Dependencies.logBinding,
   )
   .dependsOn(mcpServer, transportStdio)
