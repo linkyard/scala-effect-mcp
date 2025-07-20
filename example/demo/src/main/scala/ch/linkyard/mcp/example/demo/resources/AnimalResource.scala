@@ -3,7 +3,6 @@ package ch.linkyard.mcp.example.demo.resources
 import cats.effect.IO
 import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
-import ch.linkyard.mcp.protocol.Completion
 import ch.linkyard.mcp.protocol.Cursor
 import ch.linkyard.mcp.protocol.Resource as Res
 import ch.linkyard.mcp.protocol.Resources.ReadResource
@@ -40,29 +39,3 @@ object AnimalResource:
           ),
         )
       )).drop(after.map(_.toInt + 1).getOrElse(0))
-
-  def resourceTemplates: fs2.Stream[IO, Pageable[Res.Template]] =
-    fs2.Stream.emit((
-      "1",
-      Res.Template(
-        uriTemplate = "animal://{name}",
-        name = "Animals",
-        title = "Animals in the Zoo".some,
-        description = "Access all the animals in the zoo box".some,
-        mimeType = "text/plain".some,
-      ),
-    ))
-
-  def resourceTemplateCompletions(
-    uri: String,
-    argumentName: String,
-    valueToComplete: String,
-  ): IO[Completion] = (uri, argumentName) match
-    case ("animal://{name}", "name") =>
-      val options = AnimalBox.animals.map(_.name)
-      val matching =
-        if valueToComplete.isEmpty then options
-        else options.filter(_.toLowerCase.startsWith(valueToComplete.toLowerCase))
-      Completion(matching).pure
-    case _ =>
-      Completion(Nil).pure

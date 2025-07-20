@@ -1,8 +1,11 @@
 package ch.linkyard.mcp.server
 
+import cats.MonadThrow
+import cats.effect.Concurrent
 import cats.effect.kernel.Async
 import cats.effect.kernel.Resource as CEResource
-import ch.linkyard.mcp.protocol.Completion
+import cats.implicits.*
+import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.protocol.Cursor
 import ch.linkyard.mcp.protocol.Elicitation
 import ch.linkyard.mcp.protocol.Initialize.ClientCapabilities
@@ -80,23 +83,25 @@ object McpServer:
   trait ToolProviderWithChanges[F[_]] extends ToolProvider[F]:
     def toolChanges: fs2.Stream[F, Tool.ListChanged]
 
-  trait PromptProvider[F[_]] extends Session[F]:
+  trait PromptProvider[F[_]: MonadThrow] extends Session[F]:
     def prompts: F[List[PromptFunction[F]]]
+    def prompt(name: String): F[PromptFunction[F]] =
+      prompts.flatMap(_.find(_.prompt.name == name).toRight(McpError.error(
+        ErrorCode.InvalidParams,
+        s"Prompt $name not found",
+      )).liftTo[F])
   trait PromptProviderWithChanges[F[_]] extends PromptProvider[F]:
     def promptChanges: fs2.Stream[F, Prompts.ListChanged]
 
   type Pageable[A] = (Cursor, A)
-  trait ResourceProvider[F[_]] extends Session[F]:
+  trait ResourceProvider[F[_]: MonadThrow: Concurrent] extends Session[F]:
     def resources(after: Option[Cursor]): fs2.Stream[F, Pageable[Resource]]
     def resource(uri: String, context: CallContext[F]): F[ReadResource.Response]
-    def resourceTemplates(after: Option[Cursor]): fs2.Stream[F, Pageable[Resource.Template]]
-    def resourceTemplateCompletions(
-      uri: String,
-      argumentName: String,
-      valueToComplete: String,
-      otherArguments: Map[String, String],
-      context: CallContext[F],
-    ): F[Completion]
+    def resourceTemplates(after: Option[Cursor]): fs2.Stream[F, Pageable[ResourceTemplate[F]]]
+    def resourceTemplate(uri: String): F[ResourceTemplate[F]] =
+      resourceTemplates(None).compile.toList.flatMap(_.map(_._2).find(_.template.uriTemplate == uri)
+        .toRight(McpError.error(ErrorCode.InvalidParams, s"Resource template $uri not found"))
+        .liftTo[F])
   trait ResourceProviderWithChanges[F[_]] extends ResourceProvider[F]:
     def resourceChanges: fs2.Stream[F, Resources.ListChanged]
   trait ResourceSubscriptionProvider[F[_]] extends ResourceProviderWithChanges[F]:

@@ -228,7 +228,7 @@ private object McpServerBridge:
             for
               resourceList <- session.resourceTemplates(cursor).take(session.maxPageSize).compile.toList
               lastCursor = resourceList.lastOption.map(_._1)
-              templates = resourceList.map(_._2)
+              templates = resourceList.map(_._2.template)
             yield Resources.ListResourceTemplates.Response(templates, nextCursor = lastCursor)
           case _ => unsupported
       case Resources.ReadResource(uri, _meta) => session match
@@ -258,28 +258,24 @@ private object McpServerBridge:
         val completion = ref match
           case CompletionReference.PromptReference(name, _) => session match {
               case session: PromptProvider[F] =>
-                session.prompts.flatMap(_.find(_.prompt.name == name) match
-                  case Some(prompt) =>
-                    val callContext = createCallContext(s"completion/prompt", _meta)
-                    prompt.argumentCompletions(
-                      argument.name,
-                      argument.value,
-                      context.flatMap(_.arguments).getOrElse(Map.empty),
-                      callContext,
-                    )
-                  case None => McpError.raise(ErrorCode.InvalidParams, s"Prompt $name not found").widen)
+                session.prompt(name).flatMap(
+                  _.argumentCompletions(
+                    argument.name,
+                    argument.value,
+                    context.flatMap(_.arguments).getOrElse(Map.empty),
+                    createCallContext(s"completion/prompt", _meta),
+                  )
+                )
               case _ => Completion(Nil).pure
             }
           case CompletionReference.ResourceTemplateReference(uri) => session match {
               case session: ResourceProvider[F] =>
-                val callContext = createCallContext(s"completion/prompt", _meta)
-                session.resourceTemplateCompletions(
-                  uri,
+                session.resourceTemplate(uri).flatMap(_.completions(
                   argument.name,
                   argument.value,
                   context.flatMap(_.arguments).getOrElse(Map.empty),
-                  callContext,
-                )
+                  createCallContext(s"completion/prompt", _meta),
+                ))
               case _ => Completion(Nil).pure
             }
         completion.map(Completion.Complete.Response(_))
