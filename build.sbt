@@ -37,11 +37,23 @@ lazy val root = (project in file("."))
           oldStrategy(other)
       },
       libraryDependencies ++= Dependencies.logBinding.map(_ % Test),
+      libraryDependencies ++= Seq(
+        "io.circe" %% "circe-literal" % Dependencies.circe,
+        "io.circe" %% "circe-parser" % Dependencies.circe,
+        "org.typelevel" %% "cats-effect-testing-scalatest" % Dependencies.catsEffectTesting,
+        "org.scalatest" %% "scalatest" % Dependencies.scalatest,
+        "org.scalacheck" %% "scalacheck" % Dependencies.scalacheck,
+        "org.scalatestplus" %% "scalacheck-1-16" % Dependencies.scalatestScalacheck ,
+      ).map(_ % Test),
       publish := {},
     )),
   )
   .aggregate(
-    mcp,
+    jsonrpc2,
+    transportStdio,
+    mcpProtocol,
+    mcpServer,
+    example,
   )
 
 ThisBuild / commands += Command.command("cleanup") { state =>
@@ -50,9 +62,35 @@ ThisBuild / commands += Command.command("cleanup") { state =>
   state
 }
 
-lazy val mcp = (project in file("mcp"))
+lazy val jsonrpc2 = (project in file("jsonrpc2"))
   .settings(
-    name := "mcp",
+    name := "jsonrpc2",
+    libraryDependencies ++= Seq(
+      "co.fs2" %% "fs2-core" % Dependencies.fs2,
+      "io.circe" %% "circe-core" % Dependencies.circe,
+    ),
+  )
+
+lazy val transportStdio = (project in file("transport/stdio"))
+  .settings(
+    name := "jsonrpc2-stdio",
+    libraryDependencies ++= Seq(
+      "co.fs2" %% "fs2-io" % Dependencies.fs2,
+      "io.circe" %% "circe-parser" % Dependencies.circe,
+    ),
+  ).dependsOn(jsonrpc2)
+
+lazy val mcpProtocol = (project in file("mcp/protocol"))
+  .settings(
+    name := "mcp-protocol",
+    libraryDependencies ++= Seq(
+      "io.circe" %% "circe-core" % Dependencies.circe,
+    ),
+  ).dependsOn(jsonrpc2)
+
+lazy val mcpServer = (project in file("mcp/server"))
+  .settings(
+    name := "mcp-server",
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % Dependencies.fs2,
       "co.fs2" %% "fs2-io" % Dependencies.fs2,
@@ -61,14 +99,7 @@ lazy val mcp = (project in file("mcp"))
       "io.circe" %% "circe-generic" % Dependencies.circe,
       "com.melvinlow" %% "scala-json-schema" % Dependencies.scalaJsonSchema,
     ),
-    libraryDependencies ++= Seq(
-      "io.circe" %% "circe-literal" % Dependencies.circe,
-      "org.typelevel" %% "cats-effect-testing-scalatest" % Dependencies.catsEffectTesting,
-      "org.scalatest" %% "scalatest" % Dependencies.scalatest,
-      "org.scalacheck" %% "scalacheck" % Dependencies.scalacheck,
-      "org.scalatestplus" %% "scalacheck-1-16" % Dependencies.scalatestScalacheck ,
-    ).map(_ % Test)
-  )
+  ).dependsOn(jsonrpc2, mcpProtocol)
 
 lazy val example = (project in file("example"))
   .settings(
@@ -81,4 +112,4 @@ lazy val example = (project in file("example"))
     assembly / test := {},
     libraryDependencies ++= Dependencies.logBinding,
   )
-  .dependsOn(mcp)
+  .dependsOn(mcpServer, transportStdio)
