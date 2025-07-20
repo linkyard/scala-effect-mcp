@@ -82,13 +82,6 @@ object McpServer:
 
   trait PromptProvider[F[_]] extends Session[F]:
     def prompts: F[List[PromptFunction[F]]]
-    def promptCompletions(
-      promptName: String,
-      argumentName: String,
-      valueToComplete: String,
-      otherArguments: Map[String, String],
-      context: CallContext[F],
-    ): F[Completion]
   trait PromptProviderWithChanges[F[_]] extends PromptProvider[F]:
     def promptChanges: fs2.Stream[F, Prompts.ListChanged]
 

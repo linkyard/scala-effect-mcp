@@ -33,9 +33,11 @@ object StoryPrompt extends PromptFunction[IO]:
       ) :: Nil,
     ).pure
 
-  def completions(
+  override def argumentCompletions(
     argumentName: String,
     valueToComplete: String,
+    otherArguments: Map[String, String],
+    context: CallContext[IO],
   ): IO[Completion] = argumentName match
     case "name" => Completion(values = Nil).pure
     case "color" =>

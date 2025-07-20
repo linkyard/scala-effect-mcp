@@ -258,14 +258,16 @@ private object McpServerBridge:
         val completion = ref match
           case CompletionReference.PromptReference(name, _) => session match {
               case session: PromptProvider[F] =>
-                val callContext = createCallContext(s"completion/prompt", _meta)
-                session.promptCompletions(
-                  name,
-                  argument.name,
-                  argument.value,
-                  context.flatMap(_.arguments).getOrElse(Map.empty),
-                  callContext,
-                )
+                session.prompts.flatMap(_.find(_.prompt.name == name) match
+                  case Some(prompt) =>
+                    val callContext = createCallContext(s"completion/prompt", _meta)
+                    prompt.argumentCompletions(
+                      argument.name,
+                      argument.value,
+                      context.flatMap(_.arguments).getOrElse(Map.empty),
+                      callContext,
+                    )
+                  case None => McpError.raise(ErrorCode.InvalidParams, s"Prompt $name not found").widen)
               case _ => Completion(Nil).pure
             }
           case CompletionReference.ResourceTemplateReference(uri) => session match {

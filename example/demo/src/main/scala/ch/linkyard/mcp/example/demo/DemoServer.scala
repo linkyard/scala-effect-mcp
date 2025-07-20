@@ -35,17 +35,6 @@ class DemoServer extends McpServer[IO]:
     override val tools: IO[List[ToolFunction[IO]]] = List(ParrotTool(), AdderTool(), UserEmailTool(client)).pure
     override val prompts: IO[List[PromptFunction[IO]]] = List(StoryPrompt).pure
 
-    override def promptCompletions(
-      promptName: String,
-      argumentName: String,
-      valueToComplete: String,
-      otherArguments: Map[String, String],
-      context: CallContext[IO],
-    ): IO[Completion] = promptName match
-      case "story" => StoryPrompt.completions(argumentName, valueToComplete)
-      case _       => McpError.raise(ErrorCode.InvalidParams, s"Prompt $promptName not found")
-    end promptCompletions
-
     override def resource(uri: String, context: CallContext[IO]): IO[ReadResource.Response] =
       // Check if this is an animal resource URI
       if uri.startsWith("animal://") then
