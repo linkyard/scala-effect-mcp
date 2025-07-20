@@ -1,0 +1,7 @@
+.bloop
+.bsp
+.metals
+.cursor/mcp.json
+
+target
+**/metals.sbt

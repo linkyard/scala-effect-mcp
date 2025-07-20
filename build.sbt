@@ -1,0 +1,84 @@
+ThisBuild / scalaVersion := Dependencies.scala
+ThisBuild / organization := "ch.linkyard"
+ThisBuild / organizationName := "linkyard ag"
+ThisBuild / versionScheme := Some("strict")
+
+lazy val root = (project in file("."))
+  .settings(
+    name := "scala-effect-mcp",
+    inThisBuild(List(
+      Global / onChangedBuildSource := ReloadOnSourceChanges,
+      usePipelining := false,
+      scalacOptions += "-source:3.7",
+      scalacOptions += "-unchecked",
+      scalacOptions += "-deprecation",
+      scalacOptions += "-feature",
+      scalacOptions += "-preview",
+      scalacOptions += "-new-syntax",
+      scalacOptions += "-Wconf:any:e",
+      scalacOptions += "-Wconf:msg=Given search preference:s",
+      scalacOptions += "-Wconf:id=E198:w",
+      scalacOptions += "-Wconf:msg=unused pattern variable:s",
+      scalacOptions += "-Wvalue-discard",
+      scalacOptions += "-Wunused:all",
+      scalacOptions ++= Seq("-Xmax-inlines", "50"),
+      semanticdbEnabled := true,
+      ThisBuild / turbo := true,
+      Compile / packageDoc / publishArtifact := false,
+      Global / cancelable := true,
+      assembly / assemblyMergeStrategy := {
+        case PathList("reference.conf")                               => MergeStrategy.concat
+        case PathList("META-INF", "io.netty.versions.properties")     => MergeStrategy.last
+        case PathList("module-info.class")                            => MergeStrategy.last
+        case PathList("META-INF", "versions", _, "module-info.class") => MergeStrategy.discard
+        case PathList("com", "sun", "activation", "registries", _)    => MergeStrategy.last
+        case other =>
+          val oldStrategy = (assembly / assemblyMergeStrategy).value
+          oldStrategy(other)
+      },
+      libraryDependencies ++= Dependencies.logBinding.map(_ % Test),
+      publish := {},
+    )),
+  )
+  .aggregate(
+    mcp,
+  )
+
+ThisBuild / commands += Command.command("cleanup") { state =>
+  "root/scalafix" :: "root/Test/scalafix" ::
+  "root/scalafmt" :: "root/Test/scalafmt" ::
+  state
+}
+
+lazy val mcp = (project in file("mcp"))
+  .settings(
+    name := "mcp",
+    libraryDependencies ++= Seq(
+      "co.fs2" %% "fs2-core" % Dependencies.fs2,
+      "co.fs2" %% "fs2-io" % Dependencies.fs2,
+      "io.circe" %% "circe-core" % Dependencies.circe,
+      "io.circe" %% "circe-parser" % Dependencies.circe,
+      "io.circe" %% "circe-generic" % Dependencies.circe,
+      "com.melvinlow" %% "scala-json-schema" % Dependencies.scalaJsonSchema,
+    ),
+    libraryDependencies ++= Seq(
+      "io.circe" %% "circe-literal" % Dependencies.circe,
+      "org.typelevel" %% "cats-effect-testing-scalatest" % Dependencies.catsEffectTesting,
+      "org.scalatest" %% "scalatest" % Dependencies.scalatest,
+      "org.scalacheck" %% "scalacheck" % Dependencies.scalacheck,
+      "org.scalatestplus" %% "scalacheck-1-16" % Dependencies.scalatestScalacheck ,
+    ).map(_ % Test)
+  )
+
+lazy val example = (project in file("example"))
+  .settings(
+    name := "example",
+    run / fork := true,
+    publish / skip := true,
+    assembly / aggregate := true,
+    assembly / mainClass := Some("ch.linkyard.mcp.example.EchoMcp"),
+    assembly / assemblyJarName := "mcp.jar",
+    assembly / test := {},
+    libraryDependencies ++= Dependencies.logBinding,
+  )
+  .dependsOn(mcp)
