@@ -3,7 +3,6 @@ package ch.linkyard.mcp.protocol
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.protocol.*
 import ch.linkyard.mcp.protocol.Codec
-import io.circe.JsonObject
 import io.circe.literal.*
 import io.circe.parser.*
 import io.circe.syntax.*
@@ -379,9 +378,7 @@ class LifecycleSpec extends AnyFunSpec with OptionValues {
       }
 
       it("should serialize initialized notification with meta correctly") {
-        val initialized = Initialized(_meta =
-          Some(JsonObject("custom" -> "value".asJson))
-        )
+        val initialized = Initialized(_meta = Meta("custom" -> "value".asJson))
 
         val jsonRpc = Codec.encodeClientNotification(initialized)
         val json = jsonRpc.asJson
@@ -443,8 +440,7 @@ class LifecycleSpec extends AnyFunSpec with OptionValues {
         val params = notification.params.value
         val initialized = decode[Initialized](params.asJson.noSpaces)
         assert(initialized.isRight)
-        assert(initialized.value._meta.isDefined)
-        assert(initialized.value._meta.value("custom").flatMap(_.asString).contains("value"))
+        assert(initialized.value._meta.get("custom").flatMap(_.asString).contains("value"))
       }
     }
   }

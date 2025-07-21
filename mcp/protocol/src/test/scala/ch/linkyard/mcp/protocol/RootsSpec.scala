@@ -151,7 +151,7 @@ class RootsSpec extends AnyFunSpec with OptionValues {
         val root = Root(
           uri = "file:///path/to/root",
           name = Some("Test Root"),
-          _meta = Some(io.circe.JsonObject("custom" -> "value".asJson)),
+          _meta = Meta("custom" -> "value".asJson),
         )
 
         val json = root.asJson
@@ -184,7 +184,7 @@ class RootsSpec extends AnyFunSpec with OptionValues {
         assert(result.isRight)
         assert(result.value.uri == "file:///path/to/root")
         assert(result.value.name.contains("Test Root"))
-        assert(result.value._meta.isDefined)
+        assert(result.value._meta.get("custom").flatMap(_.asString).contains("value"))
       }
     }
   }

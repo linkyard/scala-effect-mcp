@@ -10,7 +10,7 @@ case class Prompt(
   title: Option[String],
   description: Option[String],
   arguments: Option[List[PromptArgument]],
-  _meta: Option[JsonObject] = None,
+  _meta: Meta = Meta.empty,
 )
 
 object Prompt:
@@ -20,8 +20,7 @@ object Prompt:
       "title" -> prompt.title.asJson,
       "description" -> prompt.description.asJson,
       "arguments" -> prompt.arguments.asJson,
-    ).deepMerge(
-      prompt._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      "_meta" -> prompt._meta.asJson,
     )
   }
   given Decoder[Prompt] = Decoder.instance { c =>
@@ -30,7 +29,7 @@ object Prompt:
       title <- c.downField("title").as[Option[String]]
       description <- c.downField("description").as[Option[String]]
       arguments <- c.downField("arguments").as[Option[List[PromptArgument]]]
-      _meta <- c.downField("_meta").as[Option[JsonObject]]
+      _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
     yield Prompt(name, title, description, arguments, _meta)
   }
 
@@ -100,7 +99,7 @@ object PromptReference:
 object Prompts:
   case class ListPrompts(
     cursor: Option[Cursor],
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = ListPrompts.Response
     override val method: RequestMethod = RequestMethod.ListPrompts
@@ -108,22 +107,21 @@ object Prompts:
   object ListPrompts:
     given Encoder.AsObject[ListPrompts] = Encoder.AsObject.instance { listPrompts =>
       JsonObject(
-        "cursor" -> listPrompts.cursor.asJson
-      ).deepMerge(
-        listPrompts._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "cursor" -> listPrompts.cursor.asJson,
+        "_meta" -> listPrompts._meta.asJson,
       )
     }
     given Decoder[ListPrompts] = Decoder.instance { c =>
       for
         cursor <- c.downField("cursor").as[Option[Cursor]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield ListPrompts(cursor, _meta)
     }
 
     case class Response(
       prompts: List[Prompt],
       nextCursor: Option[Cursor],
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ) extends McpResponse
 
     object Response:
@@ -131,22 +129,21 @@ object Prompts:
         JsonObject(
           "prompts" -> response.prompts.asJson,
           "nextCursor" -> response.nextCursor.asJson,
-        ).deepMerge(
-          response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+          "_meta" -> response._meta.asJson,
         )
       }
       given Decoder[Response] = Decoder.instance { c =>
         for
           prompts <- c.downField("prompts").as[List[Prompt]]
           nextCursor <- c.downField("nextCursor").as[Option[Cursor]]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Response(prompts, nextCursor, _meta)
       }
 
   case class GetPrompt(
     name: String,
     arguments: Option[Map[String, String]],
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = GetPrompt.Response
     override val method: RequestMethod = RequestMethod.GetPrompt
@@ -156,22 +153,21 @@ object Prompts:
       JsonObject(
         "name" -> getPrompt.name.asJson,
         "arguments" -> getPrompt.arguments.asJson,
-      ).deepMerge(
-        getPrompt._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> getPrompt._meta.asJson,
       )
     }
     given Decoder[GetPrompt] = Decoder.instance { c =>
       for
         name <- c.downField("name").as[String]
         arguments <- c.downField("arguments").as[Option[Map[String, String]]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield GetPrompt(name, arguments, _meta)
     }
 
     case class Response(
       description: Option[String],
       messages: List[PromptMessage],
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ) extends McpResponse
 
     object Response:
@@ -179,27 +175,28 @@ object Prompts:
         JsonObject(
           "description" -> response.description.asJson,
           "messages" -> response.messages.asJson,
-        ).deepMerge(
-          response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+          "_meta" -> response._meta.asJson,
         )
       }
       given Decoder[Response] = Decoder.instance { c =>
         for
           description <- c.downField("description").as[Option[String]]
           messages <- c.downField("messages").as[List[PromptMessage]]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Response(description, messages, _meta)
       }
 
   case class ListChanged(
-    _meta: Option[JsonObject] = None
+    _meta: Meta = Meta.empty
   ) extends Notification:
     override val method: NotificationMethod = NotificationMethod.PromptListChanged
 
   object ListChanged:
     given Encoder.AsObject[ListChanged] = Encoder.AsObject.instance { listChanged =>
-      listChanged._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      JsonObject(
+        "_meta" -> listChanged._meta.asJson
+      )
     }
     given Decoder[ListChanged] = Decoder.instance { c =>
-      c.downField("_meta").as[Option[JsonObject]].map(ListChanged.apply)
+      c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty)).map(ListChanged.apply)
     }

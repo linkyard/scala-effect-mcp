@@ -12,7 +12,7 @@ case class Tool(
   inputSchema: JsonSchema,
   outputSchema: Option[JsonSchema],
   annotations: Option[Tool.Annotations],
-  _meta: Option[JsonObject] = None,
+  _meta: Meta = Meta.empty,
 )
 
 object Tool:
@@ -24,8 +24,7 @@ object Tool:
       "inputSchema" -> tool.inputSchema.asJson,
       "outputSchema" -> tool.outputSchema.asJson,
       "annotations" -> tool.annotations.asJson,
-    ).deepMerge(
-      tool._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      "_meta" -> tool._meta.asJson,
     )
   }
   given Decoder[Tool] = Decoder.instance { c =>
@@ -36,13 +35,13 @@ object Tool:
       inputSchema <- c.downField("inputSchema").as[JsonSchema]
       outputSchema <- c.downField("outputSchema").as[Option[JsonSchema]]
       annotations <- c.downField("annotations").as[Option[Annotations]]
-      _meta <- c.downField("_meta").as[Option[JsonObject]]
+      _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
     yield Tool(name, title, description, inputSchema, outputSchema, annotations, _meta)
   }
 
   case class ListTools(
     cursor: Option[Cursor],
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = ListTools.Response
     override val method: RequestMethod = RequestMethod.ListTools
@@ -50,22 +49,21 @@ object Tool:
   object ListTools:
     given Encoder.AsObject[ListTools] = Encoder.AsObject.instance { listTools =>
       JsonObject(
-        "cursor" -> listTools.cursor.asJson
-      ).deepMerge(
-        listTools._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "cursor" -> listTools.cursor.asJson,
+        "_meta" -> listTools._meta.asJson,
       )
     }
     given Decoder[ListTools] = Decoder.instance { c =>
       for
         cursor <- c.downField("cursor").as[Option[Cursor]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield ListTools(cursor, _meta)
     }
 
     case class Response(
       tools: List[Tool],
       nextCursor: Option[Cursor],
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ) extends McpResponse
 
     object Response:
@@ -73,22 +71,21 @@ object Tool:
         JsonObject(
           "tools" -> response.tools.asJson,
           "nextCursor" -> response.nextCursor.asJson,
-        ).deepMerge(
-          response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+          "_meta" -> response._meta.asJson,
         )
       }
       given Decoder[Response] = Decoder.instance { c =>
         for
           tools <- c.downField("tools").as[List[Tool]]
           nextCursor <- c.downField("nextCursor").as[Option[Cursor]]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Response(tools, nextCursor, _meta)
       }
 
   case class CallTool(
     name: String,
     arguments: JsonObject,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = CallTool.Response
     override val method: RequestMethod = RequestMethod.CallTool
@@ -98,15 +95,14 @@ object Tool:
       JsonObject(
         "name" -> callTool.name.asJson,
         "arguments" -> callTool.arguments.asJson,
-      ).deepMerge(
-        callTool._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> callTool._meta.asJson,
       )
     }
     given Decoder[CallTool] = Decoder.instance { c =>
       for
         name <- c.downField("name").as[String]
         arguments <- c.downField("arguments").as[JsonObject]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield CallTool(name, arguments, _meta)
     }
 
@@ -114,27 +110,25 @@ object Tool:
       case Success(
         content: List[Content],
         structuredContent: Option[JsonObject],
-        _meta: Option[JsonObject] = None,
+        _meta: Meta = Meta.empty,
       )
       case Error(
         content: List[Content],
-        _meta: Option[JsonObject] = None,
+        _meta: Meta = Meta.empty,
       )
 
     object Response:
       given Encoder.AsObject[Response] = Encoder.AsObject.instance {
-        case Success(content, structuredContent, _meta) =>
-          val base = JsonObject(
+        case Success(content, structuredContent, _meta) => JsonObject(
             "content" -> content.asJson,
             "structuredContent" -> structuredContent.asJson,
+            "_meta" -> _meta.asJson,
           )
-          _meta.map(meta => base.add("_meta", meta.asJson)).getOrElse(base)
-        case Error(content, _meta) =>
-          val base = JsonObject(
+        case Error(content, _meta) => JsonObject(
             "content" -> content.asJson,
             "isError" -> true.asJson,
+            "_meta" -> _meta.asJson,
           )
-          _meta.map(meta => base.add("_meta", meta.asJson)).getOrElse(base)
       }
 
       given Decoder[Response] = Decoder.instance { c =>
@@ -142,7 +136,7 @@ object Tool:
           isError <- c.downField("isError").as[Option[Boolean]]
           structuredContent <- c.downField("structuredContent").as[Option[JsonObject]]
           content <- c.downField("content").as[List[Content]]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield {
           if isError.contains(true) then Error(content, _meta)
           else Success(content, structuredContent, _meta)
@@ -150,16 +144,18 @@ object Tool:
       }
 
   case class ListChanged(
-    _meta: Option[JsonObject] = None
+    _meta: Meta = Meta.empty
   ) extends Notification:
     override val method: NotificationMethod = NotificationMethod.ToolListChanged
 
   object ListChanged:
     given Encoder.AsObject[ListChanged] = Encoder.AsObject.instance { listChanged =>
-      listChanged._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      JsonObject(
+        "_meta" -> listChanged._meta.asJson
+      )
     }
     given Decoder[ListChanged] = Decoder.instance { c =>
-      c.downField("_meta").as[Option[JsonObject]].map(ListChanged.apply)
+      c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty)).map(ListChanged.apply)
     }
 
   case class Annotations(

@@ -31,7 +31,7 @@ import java.util.UUID
 /** Lower level server that just deals with request/response correlation and does not care about the individual messages
   */
 trait LowlevelMcpServer[F[_]]:
-  def handleRequest(request: ClientRequest): F[ServerResponse]
+  def handleRequest(request: ClientRequest, id: RequestId): F[ServerResponse]
   def handleNotification(notification: ClientNotification): F[Unit]
 
 object LowlevelMcpServer:
@@ -70,7 +70,7 @@ object LowlevelMcpServer:
       .map((stateRef, outQueue, server) =>
         def processRequest(id: RequestId, request: ClientRequest): F[Unit] =
           for
-            fiber <- server.handleRequest(request)
+            fiber <- server.handleRequest(request, id)
               .map(Codec.encodeResponse(id, _))
               .handleError {
                 case McpError.McpErrorException(error) =>

@@ -18,7 +18,7 @@ object Sampling:
     includeContext: Option[String],
     stopSequences: Option[List[String]],
     metadata: Option[JsonObject],
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = CreateMessage.Response
     override val method: RequestMethod = RequestMethod.CreateMessage
@@ -34,8 +34,7 @@ object Sampling:
         "includeContext" -> createMessage.includeContext.asJson,
         "stopSequences" -> createMessage.stopSequences.asJson,
         "metadata" -> createMessage.metadata.asJson,
-      ).deepMerge(
-        createMessage._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> createMessage._meta.asJson,
       )
     }
     given Decoder[CreateMessage] = Decoder.instance { c =>
@@ -48,7 +47,7 @@ object Sampling:
         includeContext <- c.downField("includeContext").as[Option[String]]
         stopSequences <- c.downField("stopSequences").as[Option[List[String]]]
         metadata <- c.downField("metadata").as[Option[JsonObject]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield CreateMessage(
         messages,
         modelPreferences,
@@ -67,7 +66,7 @@ object Sampling:
       content: Content,
       model: String,
       stopReason: Option[StopReason],
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ) extends McpResponse
 
     object Response:
@@ -77,8 +76,7 @@ object Sampling:
           "content" -> response.content.asJson,
           "model" -> response.model.asJson,
           "stopReason" -> response.stopReason.asJson,
-        ).deepMerge(
-          response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+          "_meta" -> response._meta.asJson,
         )
       }
       given Decoder[Response] = Decoder.instance { c =>
@@ -87,7 +85,7 @@ object Sampling:
           content <- c.downField("content").as[Content]
           model <- c.downField("model").as[String]
           stopReason <- c.downField("stopReason").as[Option[StopReason]]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Response(role, content, model, stopReason, _meta)
       }
 

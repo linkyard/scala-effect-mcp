@@ -1,5 +1,13 @@
 {
-    "files.watcherExclude": {
-        "**/target": true
+  "files.watcherExclude": {
+    "**/target": true
+  },
+  "[scala]": {
+    "editor.tabSize": 2,
+    "editor.formatOnSave": false,
+    "editor.formatOnPaste": false,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "never"
     }
+  }
 }

@@ -199,7 +199,7 @@ class SamplingSpec extends AnyFunSpec with OptionValues {
           content = Content.Text("Hello world", None),
         )
 
-        val json = message.asJson
+        val json = message.asJson.deepDropNullValues
 
         val expected = json"""
         {

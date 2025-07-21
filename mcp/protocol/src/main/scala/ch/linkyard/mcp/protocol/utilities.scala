@@ -8,7 +8,7 @@ import io.circe.syntax.*
 case class Cancelled(
   requestId: RequestId,
   reason: String,
-  _meta: Option[JsonObject] = None,
+  _meta: Meta = Meta.empty,
 ) extends Notification:
   override val method: NotificationMethod = NotificationMethod.Cancelled
 
@@ -17,42 +17,45 @@ object Cancelled:
     JsonObject(
       "requestId" -> cancelled.requestId.asJson,
       "reason" -> cancelled.reason.asJson,
-    ).deepMerge(
-      cancelled._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      "_meta" -> cancelled._meta.asJson,
     )
   }
   given Decoder[Cancelled] = Decoder.instance { c =>
     for
       requestId <- c.downField("requestId").as[RequestId]
       reason <- c.downField("reason").as[String]
-      _meta <- c.downField("_meta").as[Option[JsonObject]]
+      _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
     yield Cancelled(requestId, reason, _meta)
   }
 
 case class Ping(
-  _meta: Option[JsonObject] = None
+  _meta: Meta = Meta.empty
 ) extends Request:
   override val method: RequestMethod = RequestMethod.Ping
   override type Response = Ping.Response
 
 object Ping:
   given Encoder.AsObject[Ping] = Encoder.AsObject.instance { ping =>
-    ping._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+    JsonObject(
+      "_meta" -> ping._meta.asJson
+    )
   }
   given Decoder[Ping] = Decoder.instance { c =>
-    c.downField("_meta").as[Option[JsonObject]].map(Ping.apply)
+    c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty)).map(Ping.apply)
   }
 
   case class Response(
-    _meta: Option[JsonObject] = None
+    _meta: Meta = Meta.empty
   ) extends McpResponse
 
   object Response:
     given Encoder.AsObject[Response] = Encoder.AsObject.instance { response =>
-      response._meta.map(meta => JsonObject("_meta" -> meta.toJson)).getOrElse(JsonObject.empty)
+      JsonObject(
+        "_meta" -> response._meta.asJson
+      )
     }
     given Decoder[Response] = Decoder.instance { c =>
-      c.downField("_meta").as[Option[JsonObject]].map(Response.apply)
+      c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty)).map(Response.apply)
     }
 
 case class ProgressNotification(
@@ -60,7 +63,7 @@ case class ProgressNotification(
   progress: Double,
   total: Option[Double],
   message: Option[String],
-  _meta: Option[JsonObject] = None,
+  _meta: Meta = Meta.empty,
 ) extends Notification:
   override val method: NotificationMethod = NotificationMethod.Progress
 
@@ -71,8 +74,7 @@ object ProgressNotification:
       "progress" -> notification.progress.asJson,
       "total" -> notification.total.asJson,
       "message" -> notification.message.asJson,
-    ).deepMerge(
-      notification._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      "_meta" -> notification._meta.asJson,
     )
   }
   given Decoder[ProgressNotification] = Decoder.instance { c =>
@@ -81,14 +83,14 @@ object ProgressNotification:
       progress <- c.downField("progress").as[Double]
       total <- c.downField("total").as[Option[Double]]
       message <- c.downField("message").as[Option[String]]
-      _meta <- c.downField("_meta").as[Option[JsonObject]]
+      _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
     yield ProgressNotification(progressToken, progress, total, message, _meta)
   }
 
 object Logging:
   case class SetLevel(
     level: LoggingLevel,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = SetLevel.Response
     override val method: RequestMethod = RequestMethod.SetLevel
@@ -96,35 +98,36 @@ object Logging:
   object SetLevel:
     given Encoder.AsObject[SetLevel] = Encoder.AsObject.instance { setLevel =>
       JsonObject(
-        "level" -> setLevel.level.asJson
-      ).deepMerge(
-        setLevel._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "level" -> setLevel.level.asJson,
+        "_meta" -> setLevel._meta.asJson,
       )
     }
     given Decoder[SetLevel] = Decoder.instance { c =>
       for
         level <- c.downField("level").as[LoggingLevel]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield SetLevel(level, _meta)
     }
 
     case class Response(
-      _meta: Option[JsonObject] = None
+      _meta: Meta = Meta.empty
     ) extends McpResponse
 
     object Response:
       given Encoder.AsObject[Response] = Encoder.AsObject.instance { response =>
-        response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        JsonObject(
+          "_meta" -> response._meta.asJson
+        )
       }
       given Decoder[Response] = Decoder.instance { c =>
-        c.downField("_meta").as[Option[JsonObject]].map(Response.apply)
+        c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty)).map(Response.apply)
       }
 
   case class LoggingMessage(
     level: LoggingLevel,
     logger: Option[String],
     data: io.circe.Json,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Notification:
     override val method: NotificationMethod = NotificationMethod.LoggingMessage
 
@@ -134,8 +137,7 @@ object Logging:
         "level" -> message.level.asJson,
         "logger" -> message.logger.asJson,
         "data" -> message.data.asJson,
-      ).deepMerge(
-        message._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> message._meta.asJson,
       )
     }
     given Decoder[LoggingMessage] = Decoder.instance { c =>
@@ -143,7 +145,7 @@ object Logging:
         level <- c.downField("level").as[LoggingLevel]
         logger <- c.downField("logger").as[Option[String]]
         data <- c.downField("data").as[io.circe.Json]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield LoggingMessage(level, logger, data, _meta)
     }
 
@@ -181,7 +183,7 @@ object Completion:
     ref: CompletionReference,
     argument: Complete.Argument,
     context: Option[Complete.Context],
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = Complete.Response
     override val method: RequestMethod = RequestMethod.Complete
@@ -192,8 +194,7 @@ object Completion:
         "ref" -> complete.ref.asJson,
         "argument" -> complete.argument.asJson,
         "context" -> complete.context.asJson,
-      ).deepMerge(
-        complete._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> complete._meta.asJson,
       )
     }
     given Decoder[Complete] = Decoder.instance { c =>
@@ -201,7 +202,7 @@ object Completion:
         ref <- c.downField("ref").as[CompletionReference]
         argument <- c.downField("argument").as[Argument]
         context <- c.downField("context").as[Option[Context]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Complete(ref, argument, context, _meta)
     }
 
@@ -233,21 +234,20 @@ object Completion:
 
     case class Response(
       completion: Completion,
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ) extends McpResponse
 
     object Response:
       given Encoder.AsObject[Response] = Encoder.AsObject.instance { response =>
         JsonObject(
-          "completion" -> response.completion.asJson
-        ).deepMerge(
-          response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+          "completion" -> response.completion.asJson,
+          "_meta" -> response._meta.asJson,
         )
       }
       given Decoder[Response] = Decoder.instance { c =>
         for
           completion <- c.downField("completion").as[Completion]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Response(completion, _meta)
       }
 

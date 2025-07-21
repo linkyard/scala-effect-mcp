@@ -1,7 +1,9 @@
 package ch.linkyard.mcp.protocol
 
+import cats.kernel.Monoid
 import io.circe.Decoder
 import io.circe.Encoder
+import io.circe.Json
 import io.circe.JsonObject
 import io.circe.syntax.*
 
@@ -37,6 +39,24 @@ object ProgressToken:
       .orElse(c.as[Long].map(TokenNumber.apply))
   }
 
+opaque type Meta = JsonObject
+object Meta:
+  def apply(values: (String, Json)*): Meta = JsonObject(values*)
+  def apply(obj: JsonObject): Meta = obj
+  val empty: Meta = JsonObject.empty
+  def withRequestRelation(req: RequestId): Meta = JsonObject("relatesTo" -> req.asJson)
+  def withProgressToken(t: ProgressToken): Meta = JsonObject("progressToken" -> t.asJson)
+  extension (m: Meta)
+    def progressToken: Option[ProgressToken] = m("progressToken").flatMap(_.as[ProgressToken].toOption)
+    def relatesTo: Option[RequestId] = m("relatesTo").flatMap(_.as[RequestId].toOption)
+    def get(key: String): Option[Json] = m(key)
+    def asJsonObject: JsonObject = m
+  given Decoder[Meta] = Decoder[Option[JsonObject]].map(_.getOrElse(JsonObject.empty))
+  given Encoder[Meta] = Encoder[Option[JsonObject]].contramap(o => if o.isEmpty then None else Some(o))
+  given Monoid[Meta]:
+    def combine(x: Meta, y: Meta): Meta = y.toMap.foldLeft(x)((m, e) => m.add(e._1, e._2))
+    def empty: Meta = Meta.empty
+
 enum Role:
   case User
   case Assistant
@@ -59,18 +79,18 @@ type Cursor = String
 type JsonSchema = JsonObject
 
 enum Content:
-  case Text(text: String, annotations: Option[Resource.Annotations] = None, _meta: Option[JsonObject] = None)
+  case Text(text: String, annotations: Option[Resource.Annotations] = None, _meta: Meta = Meta.empty)
   case Image(
     data: Array[Byte],
     mimeType: String,
     annotations: Option[Resource.Annotations] = None,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   )
   case Audio(
     data: Array[Byte],
     mimeType: String,
     annotations: Option[Resource.Annotations] = None,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   )
   case ResourceLink(
     uri: String,
@@ -79,66 +99,56 @@ enum Content:
     mimeType: Option[String],
     size: Option[Long],
     annotations: Option[Resource.Annotations] = None,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   )
   case EmbeddedResource(
     resource: Resource.Embedded,
     annotations: Option[Resource.Annotations] = None,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   )
 
 object Content:
   given Encoder[Content] = Encoder.instance {
-    case Text(text, annotations, _meta) =>
-      val base = JsonObject(
+    case Text(text, annotations, _meta) => Json.obj(
         "type" -> "text".asJson,
         "text" -> text.asJson,
+        "annotations" -> annotations.asJson,
+        "_meta" -> _meta.asJson,
       )
-      val withAnnotations = annotations.map(ann => base.add("annotations", ann.asJson)).getOrElse(base)
-      val withMeta = _meta.map(meta => withAnnotations.add("_meta", meta.toJson)).getOrElse(withAnnotations)
-      withMeta.asJson
 
-    case Image(data, mimeType, annotations, _meta) =>
-      val base = JsonObject(
+    case Image(data, mimeType, annotations, _meta) => Json.obj(
         "type" -> "image".asJson,
         "data" -> Base64.getEncoder.encodeToString(data).asJson,
         "mimeType" -> mimeType.asJson,
+        "annotations" -> annotations.asJson,
+        "_meta" -> _meta.asJson,
       )
-      val withAnnotations = annotations.map(ann => base.add("annotations", ann.asJson)).getOrElse(base)
-      val withMeta = _meta.map(meta => withAnnotations.add("_meta", meta.toJson)).getOrElse(withAnnotations)
-      withMeta.asJson
 
-    case Audio(data, mimeType, annotations, _meta) =>
-      val base = JsonObject(
+    case Audio(data, mimeType, annotations, _meta) => Json.obj(
         "type" -> "audio".asJson,
         "data" -> Base64.getEncoder.encodeToString(data).asJson,
         "mimeType" -> mimeType.asJson,
+        "annotations" -> annotations.asJson,
+        "_meta" -> _meta.asJson,
       )
-      val withAnnotations = annotations.map(ann => base.add("annotations", ann.asJson)).getOrElse(base)
-      val withMeta = _meta.map(meta => withAnnotations.add("_meta", meta.toJson)).getOrElse(withAnnotations)
-      withMeta.asJson
 
-    case ResourceLink(uri, name, description, mimeType, size, annotations, _meta) =>
-      val base = JsonObject(
+    case ResourceLink(uri, name, description, mimeType, size, annotations, _meta) => Json.obj(
         "type" -> "resource_link".asJson,
         "uri" -> uri.asJson,
         "name" -> name.asJson,
         "description" -> description.asJson,
         "mimeType" -> mimeType.asJson,
         "size" -> size.asJson,
+        "annotations" -> annotations.asJson,
+        "_meta" -> _meta.asJson,
       )
-      val withAnnotations = annotations.map(ann => base.add("annotations", ann.asJson)).getOrElse(base)
-      val withMeta = _meta.map(meta => withAnnotations.add("_meta", meta.toJson)).getOrElse(withAnnotations)
-      withMeta.asJson
 
-    case EmbeddedResource(resource, annotations, _meta) =>
-      val base = JsonObject(
+    case EmbeddedResource(resource, annotations, _meta) => Json.obj(
         "type" -> "resource".asJson,
         "resource" -> resource.asJson,
+        "annotations" -> annotations.asJson,
+        "_meta" -> _meta.asJson,
       )
-      val withAnnotations = annotations.map(ann => base.add("annotations", ann.asJson)).getOrElse(base)
-      val withMeta = _meta.map(meta => withAnnotations.add("_meta", meta.toJson)).getOrElse(withAnnotations)
-      withMeta.asJson
   }
 
 private def base64Decoder: Decoder[Array[Byte]] =
@@ -150,7 +160,7 @@ given Decoder[Content] = Decoder.instance { c =>
       for
         text <- c.downField("text").as[String]
         annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Content.Text(text, annotations, _meta)
 
     case "image" =>
@@ -158,7 +168,7 @@ given Decoder[Content] = Decoder.instance { c =>
         data <- c.downField("data").as[Array[Byte]](using base64Decoder)
         mimeType <- c.downField("mimeType").as[String]
         annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Content.Image(data, mimeType, annotations, _meta)
 
     case "audio" =>
@@ -166,7 +176,7 @@ given Decoder[Content] = Decoder.instance { c =>
         data <- c.downField("data").as[Array[Byte]](using base64Decoder)
         mimeType <- c.downField("mimeType").as[String]
         annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Content.Audio(data, mimeType, annotations, _meta)
 
     case "resource_link" =>
@@ -177,14 +187,14 @@ given Decoder[Content] = Decoder.instance { c =>
         mimeType <- c.downField("mimeType").as[Option[String]]
         size <- c.downField("size").as[Option[Long]]
         annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Content.ResourceLink(uri, name, description, mimeType, size, annotations, _meta)
 
     case "resource" =>
       for
         resource <- c.downField("resource").as[Resource.Embedded]
         annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Content.EmbeddedResource(resource, annotations, _meta)
 
     case other =>
@@ -200,7 +210,7 @@ case class Resource(
   mimeType: Option[String],
   size: Option[Long],
   annotations: Option[Resource.Annotations] = None,
-  _meta: Option[JsonObject] = None,
+  _meta: Meta = Meta.empty,
 )
 
 object Resource:
@@ -213,8 +223,7 @@ object Resource:
       "mimeType" -> resource.mimeType.asJson,
       "size" -> resource.size.asJson,
       "annotations" -> resource.annotations.asJson,
-    ).deepMerge(
-      resource._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      "_meta" -> resource._meta.asJson,
     )
   }
   given Decoder[Resource] = Decoder.instance { c =>
@@ -226,7 +235,7 @@ object Resource:
       mimeType <- c.downField("mimeType").as[Option[String]]
       size <- c.downField("size").as[Option[Long]]
       annotations <- c.downField("annotations").as[Option[Annotations]]
-      _meta <- c.downField("_meta").as[Option[JsonObject]]
+      _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
     yield Resource(uri, name, title, description, mimeType, size, annotations, _meta)
   }
 
@@ -281,7 +290,7 @@ object Resource:
     description: Option[String],
     mimeType: Option[String],
     annotations: Option[Resource.Annotations] = None,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   )
   object Template:
     given Encoder.AsObject[Template] = Encoder.AsObject.instance { template =>
@@ -292,8 +301,7 @@ object Resource:
         "description" -> template.description.asJson,
         "mimeType" -> template.mimeType.asJson,
         "annotations" -> template.annotations.asJson,
-      ).deepMerge(
-        template._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> template._meta.asJson,
       )
     }
     given Decoder[Template] = Decoder.instance { c =>
@@ -304,7 +312,7 @@ object Resource:
         description <- c.downField("description").as[Option[String]]
         mimeType <- c.downField("mimeType").as[Option[String]]
         annotations <- c.downField("annotations").as[Option[Annotations]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Template(uriTemplate, name, title, description, mimeType, annotations, _meta)
     }
 
@@ -332,27 +340,23 @@ object Resource:
     }
 
   enum Contents:
-    case Text(uri: String, mimeType: Option[String], text: String, _meta: Option[JsonObject] = None)
-    case Blob(uri: String, mimeType: Option[String], blob: String, _meta: Option[JsonObject] = None)
+    case Text(uri: String, mimeType: Option[String], text: String, _meta: Meta = Meta.empty)
+    case Blob(uri: String, mimeType: Option[String], blob: String, _meta: Meta = Meta.empty)
 
   object Contents:
     given Encoder[Contents] = Encoder.instance {
-      case Text(uri, mimeType, text, _meta) =>
-        val base = JsonObject(
+      case Text(uri, mimeType, text, _meta) => Json.obj(
           "uri" -> uri.asJson,
           "mimeType" -> mimeType.asJson,
           "text" -> text.asJson,
+          "_meta" -> _meta.asJson,
         )
-        val withMeta = _meta.map(meta => base.add("_meta", meta.toJson)).getOrElse(base)
-        withMeta.asJson
-      case Blob(uri, mimeType, blob, _meta) =>
-        val base = JsonObject(
+      case Blob(uri, mimeType, blob, _meta) => Json.obj(
           "uri" -> uri.asJson,
           "mimeType" -> mimeType.asJson,
           "blob" -> blob.asJson,
+          "_meta" -> _meta.asJson,
         )
-        val withMeta = _meta.map(meta => base.add("_meta", meta.toJson)).getOrElse(base)
-        withMeta.asJson
     }
 
     given Decoder[Contents] = Decoder.instance { c =>
@@ -361,7 +365,7 @@ object Resource:
         for
           uri <- c.downField("uri").as[String]
           mimeType <- c.downField("mimeType").as[Option[String]]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Text(uri, mimeType, text, _meta)
       }.getOrElse {
         // If no text field, try as Blob
@@ -369,7 +373,7 @@ object Resource:
           uri <- c.downField("uri").as[String]
           mimeType <- c.downField("mimeType").as[Option[String]]
           blob <- c.downField("blob").as[String]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Blob(uri, mimeType, blob, _meta)
       }
     }

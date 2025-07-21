@@ -365,7 +365,7 @@ class PromptsSpec extends AnyFunSpec with OptionValues {
           )),
         )
 
-        val json = prompt.asJson
+        val json = prompt.asJson.deepDropNullValues
 
         val expected = json"""
         {
@@ -460,7 +460,7 @@ class PromptsSpec extends AnyFunSpec with OptionValues {
           content = Content.Text("Hello world", None),
         )
 
-        val json = message.asJson
+        val json = message.asJson.deepDropNullValues
 
         val expected = json"""
         {

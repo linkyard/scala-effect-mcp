@@ -31,7 +31,6 @@ import ch.linkyard.mcp.protocol.Tool.ListTools
 import ch.linkyard.mcp.server.LowlevelMcpServer.Communication
 import ch.linkyard.mcp.server.McpServer.*
 import io.circe.Json
-import io.circe.JsonObject
 
 private object McpServerBridge:
   def apply[F[_]: Async](initial: SwitchTo[F] => Phase[F]): Resource[F, LowlevelMcpServer[F]] =
@@ -47,8 +46,8 @@ private object McpServerBridge:
   type SwitchTo[F[_]] = Phase[F] => F[Unit]
 
   private class Bridge[F[_]: Async](state: Ref[F, Phase[F]]) extends LowlevelMcpServer[F]:
-    override def handleRequest(request: ClientRequest): F[ServerResponse] =
-      state.get.flatMap(_.handleRequest(request))
+    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] =
+      state.get.flatMap(_.handleRequest(request, requestId))
     override def handleNotification(notification: ClientNotification): F[Unit] =
       state.get.flatMap(_.handleNotification(notification))
     def switchTo(newState: Phase[F]): F[Unit] =
@@ -93,7 +92,7 @@ private object McpServerBridge:
     comms: LowlevelMcpServer.Communication[F],
     switchTo: SwitchTo[F],
   ) extends Phase[F]:
-    override def handleRequest(request: ClientRequest): F[ServerResponse] =
+    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] =
       request match
         case init: Initialize =>
           for
@@ -123,7 +122,7 @@ private object McpServerBridge:
     comms: LowlevelMcpServer.Communication[F],
     switchTo: SwitchTo[F],
   ) extends Phase[F]:
-    override def handleRequest(request: ClientRequest): F[ServerResponse] = request match
+    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] = request match
       case init: Initialize =>
         for
           instructions <- session.instructions
@@ -154,24 +153,24 @@ private object McpServerBridge:
     private def unsupported: F[ServerResponse] =
       McpError.raise(ErrorCode.MethodNotFound, "Capability not supported").widen
 
-    private def createCallContext(name: String, _meta: Option[JsonObject]): CallContext[F] =
+    private def createCallContext(name: String, _meta: Meta, request: RequestId): CallContext[F] =
       new CallContext[F] {
         override def reportProgress(
           progress: Double,
           total: Option[Double] = None,
           message: Option[String] = None,
-        ): F[Unit] = _meta.flatMap(_("progressToken")).flatMap(_.as[ProgressToken].toOption) match
+        ): F[Unit] = _meta.progressToken match
           case Some(progressToken) =>
-            comms.notify(ProgressNotification(progressToken, progress, total, message))
+            comms.notify(ProgressNotification(progressToken, progress, total, message, Meta.withRequestRelation(request)))
           case None => Async[F].unit
         override def log(level: LoggingLevel, message: String): F[Unit] =
           client.log(level, name.some, message)
         override def log(level: LoggingLevel, data: Json): F[Unit] =
           client.log(level, name.some, data)
-        override val meta: Option[JsonObject] = _meta
+        override val meta: Meta = _meta
       }
 
-    override def handleRequest(request: ClientRequest): F[ServerResponse] = request match
+    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] = request match
       case Tool.ListTools(_, _) => session match {
           case session: ToolProvider[F] => session.tools.map(_.map(tool =>
               Tool(
@@ -197,7 +196,7 @@ private object McpServerBridge:
               tool <- session.tools
                 .flatMap(_.find(_.name == name)
                   .toRight(McpError.error(ErrorCode.InvalidRequest, s"Tool $name not found")).liftTo[F])
-              context = createCallContext(s"tool/${tool.name}", _meta)
+              context = createCallContext(s"tool/${tool.name}", _meta, requestId)
               response <- tool.apply(arguments, context)
             yield response
           case _ => unsupported
@@ -211,7 +210,7 @@ private object McpServerBridge:
             for
               prompt <- session.prompts.flatMap(_.find(_.prompt.name == name)
                 .toRight(McpError.error(ErrorCode.InvalidRequest, s"Prompt $name not found")).liftTo[F])
-              context = createCallContext(s"prompt/$name", _meta)
+              context = createCallContext(s"prompt/$name", _meta, requestId)
               response <- prompt.get(arguments.getOrElse(Map.empty), context)
             yield response
           case _ => unsupported
@@ -233,13 +232,13 @@ private object McpServerBridge:
           case _ => unsupported
       case Resources.ReadResource(uri, _meta) => session match
           case session: ResourceProvider[F] =>
-            val context = createCallContext(s"resource/$uri", _meta)
+            val context = createCallContext(s"resource/$uri", _meta, requestId)
             session.resource(uri, context).widen
           case _ => unsupported
       case Resources.Subscribe(uri, _meta) => session match
           case session: ResourceSubscriptionProvider[F] =>
             for
-              context = createCallContext("resource/subription", _meta)
+              context = createCallContext("resource/subription", _meta, requestId)
               fibre <- session.resourceSubscription(uri, context)
                 .evalMap(updated => comms.notify(Resources.Updated(uri, updated.meta)))
                 .compile.drain.start
@@ -263,7 +262,7 @@ private object McpServerBridge:
                     argument.name,
                     argument.value,
                     context.flatMap(_.arguments).getOrElse(Map.empty),
-                    createCallContext(s"completion/prompt", _meta),
+                    createCallContext(s"completion/prompt", _meta, requestId),
                   )
                 )
               case _ => Completion(Nil).pure
@@ -274,7 +273,7 @@ private object McpServerBridge:
                   argument.name,
                   argument.value,
                   context.flatMap(_.arguments).getOrElse(Map.empty),
-                  createCallContext(s"completion/prompt", _meta),
+                  createCallContext(s"completion/prompt", _meta, requestId),
                 ))
               case _ => Completion(Nil).pure
             }

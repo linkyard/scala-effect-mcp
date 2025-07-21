@@ -104,7 +104,7 @@ class LowlevelMcpServerSpec extends AsyncFunSpec with AsyncIOSpec with Matchers 
           comms =>
             cats.effect.Resource.eval(commsDeferred.complete(comms).void).map(_ =>
               new LowlevelMcpServer[IO]:
-                override def handleRequest(request: ClientRequest): IO[ServerResponse] =
+                override def handleRequest(request: ClientRequest, requestId: RequestId): IO[ServerResponse] =
                   for
                     deferred <- Deferred[IO, ServerResponse | Exception]
                     _ <- serverRequestIn.update(_ :+ (request, deferred))
@@ -215,7 +215,7 @@ class LowlevelMcpServerSpec extends AsyncFunSpec with AsyncIOSpec with Matchers 
           Tool.ListTools(None),
           IO.sleep(5.seconds) >> Tool.ListTools.Response(List.empty, Some("should not be sent")).pure,
         ).start
-        _ <- controller.sendFromClient(Cancelled(RequestId.IdNumber(3), "abort", None))
+        _ <- controller.sendFromClient(Cancelled(RequestId.IdNumber(3), "abort", Meta.empty))
         _ <- controller.pendingCancelled.asserting(_ should have size 1)
         _ <- f.cancel // this does not get cancelled because of the way the test is written (via deferrable), so we need to cancel it manually
         result <- controller.clientReceived.asserting(_ shouldBe empty)
@@ -226,7 +226,7 @@ class LowlevelMcpServerSpec extends AsyncFunSpec with AsyncIOSpec with Matchers 
       for
         _ <- controller.sendFromClient((RequestId.IdNumber(4), Tool.ListTools(None)))
         _ <- IO.sleep(100.millis)
-        _ <- controller.sendFromClient(Cancelled(RequestId.IdNumber(4), "abort", None))
+        _ <- controller.sendFromClient(Cancelled(RequestId.IdNumber(4), "abort", Meta.empty))
         _ <- controller.handleRequestFromClientByDoingNothing(Tool.ListTools(None)).attempt.void
         result <- controller.clientReceived.asserting(_ shouldBe empty)
       yield result

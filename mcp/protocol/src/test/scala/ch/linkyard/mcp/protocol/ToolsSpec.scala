@@ -484,7 +484,7 @@ class ToolsSpec extends AnyFunSpec with OptionValues {
           )),
         )
 
-        val json = tool.asJson
+        val json = tool.asJson.deepDropNullValues
 
         val expected = json"""
         {

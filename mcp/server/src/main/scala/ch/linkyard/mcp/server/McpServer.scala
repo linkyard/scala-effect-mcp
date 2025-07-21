@@ -12,6 +12,7 @@ import ch.linkyard.mcp.protocol.Initialize.ClientCapabilities
 import ch.linkyard.mcp.protocol.Initialize.PartyInfo
 import ch.linkyard.mcp.protocol.JsonSchema
 import ch.linkyard.mcp.protocol.LoggingLevel
+import ch.linkyard.mcp.protocol.Meta
 import ch.linkyard.mcp.protocol.Prompts
 import ch.linkyard.mcp.protocol.Resource
 import ch.linkyard.mcp.protocol.Resources
@@ -53,7 +54,7 @@ object McpServer:
     def elicit(
       message: String,
       requestedSchema: JsonSchema,
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ): F[Elicitation.Create.Response]
 
     def listRoots: F[Roots.ListRoots.Response]
@@ -68,7 +69,7 @@ object McpServer:
       includeContext: Option[String] = None,
       stopSequences: Option[List[String]] = None,
       metadata: Option[JsonObject] = None,
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ): F[Sampling.CreateMessage.Response]
   end Client
 
@@ -115,7 +116,7 @@ object McpServer:
     capabilities: ClientCapabilities,
     protocolVersion: String,
   )
-  case class ResourceUpdated(meta: Option[JsonObject] = None)
+  case class ResourceUpdated(meta: Meta = Meta.empty)
 
   enum ElicitationField:
     case Text(name: String, required: Boolean, title: Option[String] = None, description: Option[String] = None)

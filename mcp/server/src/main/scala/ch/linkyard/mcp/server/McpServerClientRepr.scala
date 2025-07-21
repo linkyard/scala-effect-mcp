@@ -38,7 +38,7 @@ private class McpServerClientRepr[F[_]: Async] private (
     includeContext: Option[String] = None,
     stopSequences: Option[List[String]] = None,
     metadata: Option[JsonObject] = None,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ): F[Sampling.CreateMessage.Response] =
     if client.capabilities.sampling.isDefined then
       comms.request(Sampling.CreateMessage(
@@ -64,7 +64,7 @@ private class McpServerClientRepr[F[_]: Async] private (
   override def elicit(
     message: String,
     requestedSchema: JsonSchema,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ): F[Elicitation.Create.Response] =
     if client.capabilities.elicitation.isDefined then
       comms.request(Elicitation.Create(message, requestedSchema, _meta)).flatMap(_.liftTo[F])

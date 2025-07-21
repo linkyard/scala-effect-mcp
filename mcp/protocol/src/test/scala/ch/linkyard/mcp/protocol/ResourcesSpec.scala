@@ -236,7 +236,7 @@ class ResourcesSpec extends AnyFunSpec with OptionValues {
               uri = "file:///path/to/file.txt",
               mimeType = Some("text/plain"),
               text = "Hello, world!",
-              _meta = Some(io.circe.JsonObject("encoding" -> "utf-8".asJson)),
+              _meta = Meta("encoding" -> "utf-8".asJson),
             )
           )
         )
@@ -562,7 +562,7 @@ class ResourcesSpec extends AnyFunSpec with OptionValues {
           )),
         )
 
-        val json = resource.asJson
+        val json = resource.asJson.deepDropNullValues
 
         val expected = json"""
         {
@@ -616,7 +616,7 @@ class ResourcesSpec extends AnyFunSpec with OptionValues {
           uri = "file:///path/to/file.txt",
           mimeType = Some("text/plain"),
           text = "Hello, world!",
-          _meta = Some(io.circe.JsonObject("encoding" -> "utf-8".asJson)),
+          _meta = Meta("encoding" -> "utf-8".asJson),
         )
 
         val json = content.asJson
@@ -640,7 +640,7 @@ class ResourcesSpec extends AnyFunSpec with OptionValues {
           uri = "file:///path/to/file.bin",
           mimeType = Some("application/octet-stream"),
           blob = "SGVsbG8sIHdvcmxkIQ==",
-          _meta = Some(io.circe.JsonObject("encoding" -> "base64".asJson)),
+          _meta = Meta("encoding" -> "base64".asJson),
         )
 
         val json = content.asJson
@@ -715,7 +715,7 @@ class ResourcesSpec extends AnyFunSpec with OptionValues {
           )),
         )
 
-        val json = template.asJson
+        val json = template.asJson.deepDropNullValues
 
         val expected = json"""
         {

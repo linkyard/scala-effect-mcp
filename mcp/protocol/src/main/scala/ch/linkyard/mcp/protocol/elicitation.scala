@@ -11,7 +11,7 @@ object Elicitation:
     message: String,
     /** only object with {[name: string] -> int | string | boolean} is allowed */
     requestedSchema: JsonSchema,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends Request:
     override type Response = Create.Response
     override val method: RequestMethod = RequestMethod.ElicitCreate
@@ -21,22 +21,21 @@ object Elicitation:
       JsonObject(
         "message" -> create.message.asJson,
         "requestedSchema" -> create.requestedSchema.asJson,
-      ).deepMerge(
-        create._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> create._meta.asJson,
       )
     }
     given Decoder[Create] = Decoder.instance { c =>
       for
         message <- c.downField("message").as[String]
         requestedSchema <- c.downField("requestedSchema").as[JsonSchema]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Create(message, requestedSchema, _meta)
     }
 
     case class Response(
       action: Action,
       content: Option[JsonObject],
-      _meta: Option[JsonObject] = None,
+      _meta: Meta = Meta.empty,
     ) extends McpResponse
 
     object Response:
@@ -44,15 +43,14 @@ object Elicitation:
         JsonObject(
           "action" -> response.action.asJson,
           "content" -> response.content.asJson,
-        ).deepMerge(
-          response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+          "_meta" -> response._meta.asJson,
         )
       }
       given Decoder[Response] = Decoder.instance { c =>
         for
           action <- c.downField("action").as[Action]
           content <- c.downField("content").as[Option[JsonObject]]
-          _meta <- c.downField("_meta").as[Option[JsonObject]]
+          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
         yield Response(action, content, _meta)
       }
 

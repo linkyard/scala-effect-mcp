@@ -5,6 +5,7 @@ import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.protocol.Content
 import ch.linkyard.mcp.protocol.JsonSchema
+import ch.linkyard.mcp.protocol.Meta
 import ch.linkyard.mcp.protocol.Tool
 import ch.linkyard.mcp.protocol.Tool.CallTool
 import ch.linkyard.mcp.protocol.Tool.CallTool.Response
@@ -60,7 +61,7 @@ object ToolFunction:
     case Additive(idempotent: Boolean)
     case Destructive(idempotent: Boolean)
 
-  case class ToolError(content: List[Content], _meta: Option[JsonObject] = None) extends RuntimeException("Tool error")
+  case class ToolError(content: List[Content], _meta: Meta = Meta.empty) extends RuntimeException("Tool error")
 
   def text[F[_]: MonadThrow, A: JsonSchemaEncoder: Decoder](
     info: Info,

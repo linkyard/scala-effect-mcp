@@ -9,7 +9,7 @@ case class Initialize(
   capabilities: Initialize.ClientCapabilities,
   clientInfo: Initialize.PartyInfo,
   protocolVersion: String = Initialize.defaultProtocolVersion,
-  _meta: Option[JsonObject] = None,
+  _meta: Meta = Meta.empty,
 ) extends Request:
   override type Response = Initialize.Response
   override val method: RequestMethod = RequestMethod.Initialize
@@ -22,8 +22,7 @@ object Initialize:
       "protocolVersion" -> initialize.protocolVersion.asJson,
       "capabilities" -> initialize.capabilities.asJson,
       "clientInfo" -> initialize.clientInfo.asJson,
-    ).deepMerge(
-      initialize._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+      "_meta" -> initialize._meta.asJson,
     )
   }
   given Decoder[Initialize] = Decoder.instance { c =>
@@ -31,7 +30,7 @@ object Initialize:
       protocolVersion <- c.downField("protocolVersion").as[String]
       capabilities <- c.downField("capabilities").as[ClientCapabilities]
       clientInfo <- c.downField("clientInfo").as[PartyInfo]
-      _meta <- c.downField("_meta").as[Option[JsonObject]]
+      _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
     yield Initialize(capabilities, clientInfo, protocolVersion, _meta)
   }
 
@@ -40,7 +39,7 @@ object Initialize:
     capabilities: ServerCapabilities,
     instructions: Option[String],
     protocolVersion: String = Initialize.defaultProtocolVersion,
-    _meta: Option[JsonObject] = None,
+    _meta: Meta = Meta.empty,
   ) extends McpResponse
   object Response:
     given Encoder.AsObject[Response] = Encoder.AsObject.instance { response =>
@@ -49,8 +48,7 @@ object Initialize:
         "serverInfo" -> response.serverInfo.asJson,
         "capabilities" -> response.capabilities.asJson,
         "instructions" -> response.instructions.asJson,
-      ).deepMerge(
-        response._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+        "_meta" -> response._meta.asJson,
       )
     }
     given Decoder[Response] = Decoder.instance { c =>
@@ -59,7 +57,7 @@ object Initialize:
         serverInfo <- c.downField("serverInfo").as[PartyInfo]
         capabilities <- c.downField("capabilities").as[ServerCapabilities]
         instructions <- c.downField("instructions").as[Option[String]]
-        _meta <- c.downField("_meta").as[Option[JsonObject]]
+        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
       yield Response(serverInfo, capabilities, instructions, protocolVersion, _meta)
     }
 
@@ -175,14 +173,16 @@ object Initialize:
       }
 
 case class Initialized(
-  _meta: Option[JsonObject] = None
+  _meta: Meta = Meta.empty
 ) extends Notification:
   override val method: NotificationMethod = NotificationMethod.Initialized
 
 object Initialized:
   given Encoder.AsObject[Initialized] = Encoder.AsObject.instance { initialized =>
-    initialized._meta.map(meta => JsonObject("_meta" -> meta.asJson)).getOrElse(JsonObject.empty)
+    JsonObject(
+      "_meta" -> initialized._meta.asJson
+    )
   }
   given Decoder[Initialized] = Decoder.instance { c =>
-    c.downField("_meta").as[Option[JsonObject]].map(Initialized.apply)
+    c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty)).map(Initialized.apply)
   }
