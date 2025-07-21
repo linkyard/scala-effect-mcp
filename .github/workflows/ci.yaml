@@ -19,9 +19,8 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Install sbt (via Coursier)
-        run: |
-          curl -fLo cs https://git.io/coursier-cli-linux && chmod +x cs && ./cs setup --yes
+      - name: Setup sbt launcher
+        uses: sbt/setup-sbt@v1
 
       - name: Cache sbt
         uses: actions/cache@v4
