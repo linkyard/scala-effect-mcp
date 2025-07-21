@@ -125,6 +125,8 @@ Additional Considerations:
 * Progress:
   * Progress can be reported to the client using the call context
   * Progress logs by the client are not passed on to the your code
+* Json Schema
+  * Json Schemas are automatically derived using [https://github.com/lowmelvin/scala-json-schema](scala-json-schema). You may use the @JsonSchemaField annotation to add additional attributes to the schema, for example `@JsonSchemaField("description", "my nice field".asJson).
 
 ## Testing Your MCP Server
 
