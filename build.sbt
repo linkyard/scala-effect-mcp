@@ -1,7 +1,9 @@
 ThisBuild / scalaVersion := Dependencies.scala
 ThisBuild / organization := "ch.linkyard.mcp"
 ThisBuild / organizationName := "linkyard ag"
-ThisBuild / versionScheme := Some("strict")
+ThisBuild / versionScheme := Some("early-semver")
+ThisBuild / description := "Library to implement model context protocol servers (MCP) in scala using fs2 and cats effect."
+ThisBuild / licenses := Seq("MIT" -> url("https://mit-license.org/"))
 
 lazy val root = (project in file("."))
   .settings(
@@ -36,6 +38,9 @@ lazy val root = (project in file("."))
           val oldStrategy = (assembly / assemblyMergeStrategy).value
           oldStrategy(other)
       },
+      publish / skip := true,
+      Compile / packageDoc / publishArtifact := true,
+      Compile / packageSrc / publishArtifact := true,
       libraryDependencies ++= Dependencies.logBinding.map(_ % Test),
       libraryDependencies ++= Seq(
         "io.circe" %% "circe-literal" % Dependencies.circe,
@@ -66,6 +71,7 @@ ThisBuild / commands += Command.command("cleanup") { state =>
 lazy val jsonrpc2 = (project in file("jsonrpc2"))
   .settings(
     name := "jsonrpc2",
+    publish / skip := false,
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % Dependencies.fs2,
       "io.circe" %% "circe-core" % Dependencies.circe,
@@ -75,6 +81,7 @@ lazy val jsonrpc2 = (project in file("jsonrpc2"))
 lazy val transportStdio = (project in file("transport/stdio"))
   .settings(
     name := "jsonrpc2-stdio",
+    publish / skip := false,
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-io" % Dependencies.fs2,
       "io.circe" %% "circe-parser" % Dependencies.circe,
@@ -84,6 +91,7 @@ lazy val transportStdio = (project in file("transport/stdio"))
 lazy val mcpProtocol = (project in file("mcp/protocol"))
   .settings(
     name := "mcp-protocol",
+    publish / skip := false,
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-core" % Dependencies.circe,
     ),
@@ -92,6 +100,7 @@ lazy val mcpProtocol = (project in file("mcp/protocol"))
 lazy val mcpServer = (project in file("mcp/server"))
   .settings(
     name := "mcp-server",
+    publish / skip := false,
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % Dependencies.fs2,
       "co.fs2" %% "fs2-io" % Dependencies.fs2,
