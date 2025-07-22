@@ -2,10 +2,14 @@ package ch.linkyard.mcp.server
 
 import cats.MonadThrow
 import cats.effect.Concurrent
+import cats.effect.implicits.*
 import cats.effect.kernel.Async
 import cats.effect.kernel.Resource as CEResource
 import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnectionHandler
+import ch.linkyard.mcp.jsonrpc2.JsonRpcServer
 import ch.linkyard.mcp.protocol.Cursor
 import ch.linkyard.mcp.protocol.Elicitation
 import ch.linkyard.mcp.protocol.Initialize.ClientCapabilities
@@ -30,8 +34,24 @@ trait McpServer[F[_]]:
   def connect(client: McpServer.Client[F]): CEResource[F, McpServer.Session[F]]
 
 object McpServer:
-  def create[F[_]: Async](server: McpServer[F]): Communication[F] => CEResource[F, LowlevelMcpServer[F]] = comms =>
-    McpServerBridge[F](switchTo => McpServerBridge.PhaseInitial(server, comms, switchTo))
+  extension [F[_]](server: McpServer[F])
+    def lowlevelFactory(using Async[F]): Communication[F] => CEResource[F, LowlevelMcpServer[F]] =
+      comms => McpServerBridge[F](switchTo => McpServerBridge.PhaseInitial(server, comms, switchTo))
+
+    def jsonRpcConnectionHandler(logError: Exception => F[Unit])(using Async[F]): JsonRpcConnectionHandler[F] =
+      new JsonRpcConnectionHandler[F]:
+        override def open(conn: JsonRpcConnection[F]): CEResource[F, Unit] =
+          server.start(CEResource.pure(conn), logError)
+    end jsonRpcConnectionHandler
+
+    def start(connection: CEResource[F, JsonRpcConnection[F]], logError: Exception => F[Unit])(using
+      Async[F]
+    ): CEResource[F, Unit] =
+      for
+        jsonRpcServer <- LowlevelMcpServer.start(server.lowlevelFactory, logError)
+        _ <- CEResource.make(JsonRpcServer.start[F](jsonRpcServer, connection).useForever.start)(_.cancel)
+      yield ()
+    end start
 
   trait Client[F[_]]:
     val clientInfo: PartyInfo

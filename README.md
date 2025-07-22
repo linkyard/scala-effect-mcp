@@ -6,6 +6,7 @@ Library to implement model context protocol servers (MCP) in scala using fs2 and
 
 * Current version is 0.1.0
 * Supported MCP protocol revision is 2025-06-18
+* Supported Transports: Stdio and Streamable HTTP
 
 ## Getting Started
 
@@ -23,14 +24,13 @@ libraryDependencies += "ch.linkyard.mcp" %% "jsonrpc2-stdio" % "0.1.0"
 Here's a minimal example of an MCP server that provides a simple echo tool (see [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)):
 
 ```scala
-package example
+package ch.linkyard.mcp.example.simpleEcho
 
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
 import cats.effect.kernel.Resource
 import cats.implicits.*
-import ch.linkyard.mcp.jsonrpc2.JsonRpcServer
 import ch.linkyard.mcp.jsonrpc2.transport.StdioJsonRpcConnection
 import ch.linkyard.mcp.protocol.Initialize.PartyInfo
 import ch.linkyard.mcp.server.*
@@ -70,10 +70,10 @@ object SimpleEchoServer extends IOApp:
 
   override def run(args: List[String]): IO[ExitCode] =
     // run with stdio transport
-    val serverFactory = McpServer.create(new Server)
-    LowlevelMcpServer.start(serverFactory, e => IO(System.err.println(s"Error: $e")))
-      .flatMap(jsonRpc => JsonRpcServer.start(jsonRpc, StdioJsonRpcConnection.resource[IO]))
-      .useForever.as(ExitCode.Success)
+    Server().start(
+      StdioJsonRpcConnection.resource[IO],
+      e => IO(System.err.println(s"Error: $e")),
+    ).useForever.as(ExitCode.Success)
   end run
 end SimpleEchoServer
 

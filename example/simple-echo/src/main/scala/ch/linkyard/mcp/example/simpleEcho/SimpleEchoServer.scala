@@ -5,7 +5,6 @@ import cats.effect.IO
 import cats.effect.IOApp
 import cats.effect.kernel.Resource
 import cats.implicits.*
-import ch.linkyard.mcp.jsonrpc2.JsonRpcServer
 import ch.linkyard.mcp.jsonrpc2.transport.StdioJsonRpcConnection
 import ch.linkyard.mcp.protocol.Initialize.PartyInfo
 import ch.linkyard.mcp.server.*
@@ -45,9 +44,9 @@ object SimpleEchoServer extends IOApp:
 
   override def run(args: List[String]): IO[ExitCode] =
     // run with stdio transport
-    val serverFactory = McpServer.create(new Server)
-    LowlevelMcpServer.start(serverFactory, e => IO(System.err.println(s"Error: $e")))
-      .flatMap(jsonRpc => JsonRpcServer.start(jsonRpc, StdioJsonRpcConnection.resource[IO]))
-      .useForever.as(ExitCode.Success)
+    Server().start(
+      StdioJsonRpcConnection.resource[IO],
+      e => IO(System.err.println(s"Error: $e")),
+    ).useForever.as(ExitCode.Success)
   end run
 end SimpleEchoServer
