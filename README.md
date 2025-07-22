@@ -169,7 +169,7 @@ A minimal example that shows the basic structure of an MCP server with a single 
 - **Basic Structure**: Demonstrates the essential components: `McpServer`, `Session`, and `ToolProvider`
 - **Getting Started**: Perfect for understanding the fundamentals of MCP server implementation
 
-### [DemoMcpServer](example/demo/src/main/scala/ch/linkyard/mcp/example/demo/DemoMcpServer.scala)
+### [DemoMcpServer with Stdio](example/demo/src/main/scala/ch/linkyard/mcp/example/demo/StdioDemoMcpServer.scala)
 
 A more complex example that demonstrates all major MCP concepts:
 
@@ -186,8 +186,14 @@ This example showcases:
 - Integration between different features (tools calling elicitation and sampling)
 - Resource management with pagination and templates
 - Error handling and user interaction patterns
+- Stdio connection
 
 Both examples can be built and tested using the MCP Inspector as described in the Testing section above.
+
+### [DemoMcpServer with Http](example/demo-http/src/main/scala/ch/linkyard/mcp/example/demo/HttpDemoMcpServer.scala)
+
+Same as DemoMcpServer, but via streaming HTTP instead of stdio. The server is available under <http://127.0.0.1:18283/mcp>.
+
 
 ## Project Modules
 

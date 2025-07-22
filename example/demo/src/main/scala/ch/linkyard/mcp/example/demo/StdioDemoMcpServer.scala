@@ -8,7 +8,7 @@ import ch.linkyard.mcp.jsonrpc2.transport.StdioJsonRpcConnection
 import ch.linkyard.mcp.server.LowlevelMcpServer
 import ch.linkyard.mcp.server.McpServer
 
-object DemoMcpServer extends IOApp:
+object StdioDemoMcpServer extends IOApp:
   override def run(args: List[String]): IO[ExitCode] =
     val sf = McpServer.create(new DemoServer)
     IO(System.err.println("Welcome to Echo MCP")) >>

@@ -1,0 +1,95 @@
+package ch.linkyard.mcp.jsonrpc2.transport.http4s
+
+import cats.effect.IO
+import ch.linkyard.mcp.jsonrpc2.JsonRpc
+import ch.linkyard.mcp.jsonrpc2.JsonRpc.Notification
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnectionHandler
+import io.circe.Json
+import io.circe.syntax.*
+import org.http4s.*
+import org.http4s.circe.*
+import org.http4s.circe.CirceEntityDecoder.circeEntityDecoder
+import org.http4s.dsl.io.*
+import org.typelevel.ci.CIStringSyntax
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
+
+object McpServerRoute:
+  private given Logger[IO] = Slf4jLogger.getLogger[IO]
+
+  def route(handler: JsonRpcConnectionHandler[IO])(using store: SessionStore[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
+    case req @ POST -> Root / "mcp" => req.attemptAs[JsonRpc.Message].value.flatMap {
+        case Right(init @ JsonRpc.Request(_, "initialize", _)) =>
+          Logger[IO].trace(s"Opening new session for ${init.asJson.noSpaces}") >>
+            openSession(init, handler)
+        case Right(message) =>
+          Logger[IO].trace(s"Received request ${message.asJson.noSpaces}") >>
+            withSession(req)(conn => handleMessage(message, conn))
+        case Left(decodeFailure) =>
+          Logger[IO].info(s"Failed to decode a message: ${decodeFailure.getMessage}") >>
+            BadRequest(s"Invalid json rpc message: ${decodeFailure.getMessage}")
+      }
+    case req @ GET -> Root / "mcp" => // stream not directly request related messages
+      Logger[IO].debug("Opening message stream") >>
+        withSession(req)(conn =>
+          val stream = conn.streamNonRequestRelated.map(_.toSse)
+          Ok(stream, Header.Raw(ci"Content-Type", "text/event-stream")).withSessionId(conn.sessionId)
+        )
+    case req @ DELETE -> Root / "mcp" => req.sessionId match
+        case Some(sessionId) =>
+          Logger[IO].info(s"Terminating session ${sessionId}") >>
+            store.close(sessionId) >> NoContent()
+        case None => BadRequest("no session id provided")
+
+    case GET -> Root / "health" =>
+      Ok(Json.obj("status" -> "ok".asJson))
+  }
+
+  private def openSession(init: JsonRpc.Request, handler: JsonRpcConnectionHandler[IO])(using
+    store: SessionStore[IO]
+  ): IO[Response[IO]] =
+    for
+      conn <- StatefulConnection.create[IO]()
+      (_, cleanup) <- handler.open(conn.connection).allocated
+      _ <- store.open(conn, cleanup)
+      _ <- Logger[IO].info(s"Opening new session ${conn.sessionId}")
+      _ <- conn.receivedFromClient(init)
+      response <- streamUntilResponse(init.id, conn)
+    yield response
+  end openSession
+
+  private def handleMessage(message: JsonRpc.Message, conn: StatefulConnection[IO]): IO[Response[IO]] = message match
+    case request: JsonRpc.Request =>
+      conn.receivedFromClient(request) >> streamUntilResponse(request.id, conn)
+    case response: JsonRpc.Response => // no response or follow ups expected
+      conn.receivedFromClient(response) >> NoContent()
+    case notification: Notification => // no response or follow ups expected
+      conn.receivedFromClient(notification) >> NoContent()
+  end handleMessage
+
+  private def streamUntilResponse(
+    id: JsonRpc.Id,
+    conn: StatefulConnection[IO],
+  ): IO[Response[IO]] =
+    val stream = conn.streamRequestReleated(id).map(_.toSse)
+    Ok(stream).withSessionId(conn.sessionId)
+
+  private def withSession(req: Request[IO])(f: StatefulConnection[IO] => IO[Response[IO]])(using
+    store: SessionStore[IO]
+  ): IO[Response[IO]] =
+    req.sessionId match
+      case Some(sessionId) => store.get(sessionId).flatMap {
+          case Some(session) => f(session)
+          case None          => NotFound("Session not found")
+        }
+      case None => NotFound("Session not found")
+  end withSession
+end McpServerRoute
+
+extension (req: Request[IO])
+  private def sessionId: Option[SessionId] =
+    req.headers.get(ci"Mcp-Session-Id").map(_.head.value).flatMap(SessionId.parse)
+
+extension (r: IO[Response[IO]])
+  private def withSessionId(id: SessionId): IO[Response[IO]] =
+    r.map(_.putHeaders(Header.Raw(ci"Mcp-Session-Id", id.asString)))

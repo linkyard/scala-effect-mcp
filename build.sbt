@@ -56,10 +56,12 @@ lazy val root = (project in file("."))
   .aggregate(
     jsonrpc2,
     transportStdio,
+    transportHttp4s,
     mcpProtocol,
     mcpServer,
     exampleSimpleEcho,
     exampleDemo,
+    exampleDemoHttp,
   )
 
 ThisBuild / commands += Command.command("cleanup") { state =>
@@ -85,6 +87,17 @@ lazy val transportStdio = (project in file("transport/stdio"))
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-io" % Dependencies.fs2,
       "io.circe" %% "circe-parser" % Dependencies.circe,
+    ),
+  ).dependsOn(jsonrpc2)
+
+lazy val transportHttp4s = (project in file("transport/http4s"))
+  .settings(
+    name := "mcp-server-http4s",
+    publish / skip := false,
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-dsl" % Dependencies.http4s,
+      "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
+      "org.http4s" %% "http4s-circe" % Dependencies.http4s,
     ),
   ).dependsOn(jsonrpc2)
 
@@ -131,10 +144,23 @@ lazy val exampleDemo = (project in file("example/demo"))
     name := "example-demo",
     run / fork := true,
     assembly / aggregate := true,
-    assembly / mainClass := Some("ch.linkyard.mcp.example.demo.DemoMcpServer"),
+    assembly / mainClass := Some("ch.linkyard.mcp.example.demo.StdioDemoMcpServer"),
     assembly / assemblyJarName := "demo.jar",
     assembly / test := {},
     publish / skip := true,
     libraryDependencies ++= Dependencies.logBinding,
   )
   .dependsOn(mcpServer, transportStdio)
+
+lazy val exampleDemoHttp = (project in file("example/demo-http"))
+  .settings(
+    name := "example-demo-http",
+    run / fork := true,
+    assembly / aggregate := true,
+    assembly / mainClass := Some("ch.linkyard.mcp.example.demo.HttpDemoMcpServer"),
+    assembly / assemblyJarName := "demo-http.jar",
+    assembly / test := {},
+    publish / skip := true,
+    libraryDependencies ++= Dependencies.logBinding,
+  )
+  .dependsOn(exampleDemo, transportHttp4s)
