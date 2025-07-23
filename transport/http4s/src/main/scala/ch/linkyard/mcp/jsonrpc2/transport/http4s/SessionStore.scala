@@ -42,9 +42,8 @@ object SessionStore:
         override def close(id: SessionId): F[Unit] =
           ref.modify(sessions => (sessions - id, sessions.get(id)))
             .flatMap {
-              case Some(entry) =>
-                entry.timeoutFiber.get.flatMap(_.cancel) >> entry.cleanup
-              case None => Async[F].unit
+              case Some(entry) => entry.cleanup >> entry.timeoutFiber.get.flatMap(_.cancel)
+              case None        => Async[F].unit
             }
 
         private def startTimeoutFiber(id: SessionId): F[Fiber[F, Throwable, Unit]] =
