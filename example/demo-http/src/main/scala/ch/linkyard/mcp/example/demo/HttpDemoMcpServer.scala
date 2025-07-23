@@ -28,17 +28,7 @@ object HttpDemoMcpServer extends IOApp:
       given SessionStore[IO] <- SessionStore.inMemory[IO](30.minutes)
       handler = DemoServer().jsonRpcConnectionHandler(logError)
       given Client[IO] <- EmberClientBuilder.default[IO].build
-      // To authenticate use
-      // authServer <- OAuthAuthorizationServer.fromOidcServer(uri"https://id.yourkeycloak.com/auth/realms/my-realm")
-      // middleware =
-      //   OAuthMiddleware(
-      //     name = "demo-mcp-server",
-      //     authorizationServers = authServer.rootUri :: Nil,
-      //     scopes = List("openid"),
-      //     t => IO.println(s"Got Token: $t").as(true), // check the token here
-      //   )
-      // mcpRoute = McpServerRoute.route(handler)
-      // route = middleware.wellKnownRoutes <+> authServer.route <+> middleware.protectMcp(mcpRoute)
+      // if you need authentication see the simple-authenticated example
       route = McpServerRoute.route(handler)
       _ <- EmberServerBuilder.default[IO]
         .withHost(Host.fromString("127.0.0.1").get)
