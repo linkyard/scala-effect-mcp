@@ -1,10 +1,13 @@
 package ch.linkyard.mcp.jsonrpc2.transport.http4s
 
-import org.scalatest.funspec.AnyFunSpec
+import cats.effect.IO
+import cats.effect.Ref
 import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Ref}
-import scala.concurrent.duration._
-import ch.linkyard.mcp.jsonrpc2.transport.http4s.{StatefulConnection, SessionStore}
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.StatefulConnection
+import org.scalatest.funspec.AnyFunSpec
+
+import scala.concurrent.duration.*
 
 class SessionStoreSpec extends AnyFunSpec {
   describe("SessionStore.InMemory") {
@@ -49,4 +52,4 @@ class SessionStoreSpec extends AnyFunSpec {
       test.unsafeRunSync()
     }
   }
-} 
+}

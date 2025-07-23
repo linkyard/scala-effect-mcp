@@ -4,7 +4,6 @@ import cats.effect.IO
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.Notification
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnectionHandler
-import io.circe.Json
 import io.circe.syntax.*
 import org.http4s.*
 import org.http4s.circe.*
@@ -17,33 +16,31 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 object McpServerRoute:
   private given Logger[IO] = Slf4jLogger.getLogger[IO]
 
-  def route(handler: JsonRpcConnectionHandler[IO])(using store: SessionStore[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
-    case req @ POST -> Root / "mcp" => req.attemptAs[JsonRpc.Message].value.flatMap {
-        case Right(init @ JsonRpc.Request(_, "initialize", _)) =>
-          Logger[IO].trace(s"Opening new session for ${init.asJson.noSpaces}") >>
-            openSession(init, handler)
-        case Right(message) =>
-          Logger[IO].trace(s"Received request ${message.asJson.noSpaces}") >>
-            withSession(req)(conn => handleMessage(message, conn))
-        case Left(decodeFailure) =>
-          Logger[IO].info(s"Failed to decode a message: ${decodeFailure.getMessage}") >>
-            BadRequest(s"Invalid json rpc message: ${decodeFailure.getMessage}")
-      }
-    case req @ GET -> Root / "mcp" => // stream not directly request related messages
-      Logger[IO].debug("Opening message stream") >>
-        withSession(req)(conn =>
-          val stream = conn.streamNonRequestRelated.map(_.toSse)
-          Ok(stream, Header.Raw(ci"Content-Type", "text/event-stream")).withSessionId(conn.sessionId)
-        )
-    case req @ DELETE -> Root / "mcp" => req.sessionId match
-        case Some(sessionId) =>
-          Logger[IO].info(s"Terminating session ${sessionId}") >>
-            store.close(sessionId) >> NoContent()
-        case None => BadRequest("no session id provided")
-
-    case GET -> Root / "health" =>
-      Ok(Json.obj("status" -> "ok".asJson))
-  }
+  def route(handler: JsonRpcConnectionHandler[IO], root: Path = Root)(using store: SessionStore[IO]): HttpRoutes[IO] =
+    HttpRoutes.of[IO] {
+      case req @ POST -> `root` / "mcp" => req.attemptAs[JsonRpc.Message].value.flatMap {
+          case Right(init @ JsonRpc.Request(_, "initialize", _)) =>
+            Logger[IO].trace(s"Opening new session for ${init.asJson.noSpaces}") >>
+              openSession(init, handler)
+          case Right(message) =>
+            Logger[IO].trace(s"Received request ${message.asJson.noSpaces}") >>
+              withSession(req)(conn => handleMessage(message, conn))
+          case Left(decodeFailure) =>
+            Logger[IO].info(s"Failed to decode a message: ${decodeFailure.getMessage}") >>
+              BadRequest(s"Invalid json rpc message: ${decodeFailure.getMessage}")
+        }
+      case req @ GET -> `root` / "mcp" => // stream not directly request related messages
+        Logger[IO].debug("Opening message stream") >>
+          withSession(req)(conn =>
+            val stream = conn.streamNonRequestRelated.map(_.toSse)
+            Ok(stream, Header.Raw(ci"Content-Type", "text/event-stream")).withSessionId(conn.sessionId)
+          )
+      case req @ DELETE -> `root` / "mcp" => req.sessionId match
+          case Some(sessionId) =>
+            Logger[IO].info(s"Terminating session ${sessionId}") >>
+              store.close(sessionId) >> NoContent()
+          case None => BadRequest("no session id provided")
+    }
 
   private def openSession(init: JsonRpc.Request, handler: JsonRpcConnectionHandler[IO])(using
     store: SessionStore[IO]

@@ -9,6 +9,8 @@ import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
 import ch.linkyard.mcp.server.McpServer
 import com.comcast.ip4s.Host
 import com.comcast.ip4s.Port
+import org.http4s.client.Client
+import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -25,6 +27,18 @@ object HttpDemoMcpServer extends IOApp:
     for
       given SessionStore[IO] <- SessionStore.inMemory[IO](30.minutes)
       handler = DemoServer().jsonRpcConnectionHandler(logError)
+      given Client[IO] <- EmberClientBuilder.default[IO].build
+      // To authenticate use
+      // authServer <- OAuthAuthorizationServer.fromOidcServer(uri"https://id.yourkeycloak.com/auth/realms/my-realm")
+      // middleware =
+      //   OAuthMiddleware(
+      //     name = "demo-mcp-server",
+      //     authorizationServers = authServer.rootUri :: Nil,
+      //     scopes = List("openid"),
+      //     t => IO.println(s"Got Token: $t").as(true), // check the token here
+      //   )
+      // mcpRoute = McpServerRoute.route(handler)
+      // route = middleware.wellKnownRoutes <+> authServer.route <+> middleware.protectMcp(mcpRoute)
       route = McpServerRoute.route(handler)
       _ <- EmberServerBuilder.default[IO]
         .withHost(Host.fromString("127.0.0.1").get)

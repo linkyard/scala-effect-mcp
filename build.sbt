@@ -96,7 +96,8 @@ lazy val transportHttp4s = (project in file("transport/http4s"))
     publish / skip := false,
     libraryDependencies ++= Seq(
       "org.http4s" %% "http4s-dsl" % Dependencies.http4s,
-      "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
+      "org.http4s" %% "http4s-server" % Dependencies.http4s,
+      "org.http4s" %% "http4s-client" % Dependencies.http4s,
       "org.http4s" %% "http4s-circe" % Dependencies.http4s,
     ),
   ).dependsOn(jsonrpc2)
@@ -161,6 +162,10 @@ lazy val exampleDemoHttp = (project in file("example/demo-http"))
     assembly / assemblyJarName := "demo-http.jar",
     assembly / test := {},
     publish / skip := true,
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
+      "org.http4s" %% "http4s-ember-client" % Dependencies.http4s,
+    ),
     libraryDependencies ++= Dependencies.logBinding,
   )
   .dependsOn(exampleDemo, transportHttp4s)
