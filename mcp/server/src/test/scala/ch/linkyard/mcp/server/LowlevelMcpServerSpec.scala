@@ -6,6 +6,7 @@ import cats.effect.kernel.Deferred
 import cats.effect.std.Queue
 import cats.effect.testing.scalatest.AsyncIOSpec
 import cats.implicits.*
+import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.protocol.*
@@ -31,10 +32,10 @@ class LowlevelMcpServerSpec extends AsyncFunSpec with AsyncIOSpec with Matchers 
       serverErrorsIn: Ref[IO, List[DecodingFailure]],
       serverCancelled: Ref[IO, List[ClientRequest]],
       clientIn: Ref[IO, List[JsonRpc.Message]],
-      clientOut: Queue[IO, JsonRpc.Message],
+      clientOut: Queue[IO, JsonRpc.MessageEnvelope],
       comms: LowlevelMcpServer.Communication[IO],
     ):
-      def sendFromClient(json: JsonRpc.Message): IO[Unit] = clientOut.offer(json)
+      def sendFromClient(json: JsonRpc.Message): IO[Unit] = clientOut.offer(json.withoutAuth)
       def sendFromClient(message: (RequestId, ClientRequest) | ClientNotification): IO[Unit] =
         sendFromClient(message match
           case (id, req: ClientRequest) => Codec.encodeClientRequest(id, req)
@@ -104,7 +105,11 @@ class LowlevelMcpServerSpec extends AsyncFunSpec with AsyncIOSpec with Matchers 
           comms =>
             cats.effect.Resource.eval(commsDeferred.complete(comms).void).map(_ =>
               new LowlevelMcpServer[IO]:
-                override def handleRequest(request: ClientRequest, requestId: RequestId): IO[ServerResponse] =
+                override def handleRequest(
+                  request: ClientRequest,
+                  requestId: RequestId,
+                  auth: Authentication,
+                ): IO[ServerResponse] =
                   for
                     deferred <- Deferred[IO, ServerResponse | Exception]
                     _ <- serverRequestIn.update(_ :+ (request, deferred))
@@ -113,7 +118,9 @@ class LowlevelMcpServerSpec extends AsyncFunSpec with AsyncIOSpec with Matchers 
                       case response: ServerResponse => IO.pure(response)
                       case error: Exception         => IO.raiseError(error)
                   yield result
-                override def handleNotification(notification: ClientNotification): IO[Unit] =
+                end handleRequest
+
+                override def handleNotification(notification: ClientNotification, auth: Authentication): IO[Unit] =
                   serverNotificationIn.update(_ :+ notification)
             ),
           onError = e => serverErrors.update(_ :+ e),
@@ -121,7 +128,7 @@ class LowlevelMcpServerSpec extends AsyncFunSpec with AsyncIOSpec with Matchers 
         comms <- commsDeferred.get
         clientIn <- Ref[IO].of(List.empty[JsonRpc.Message])
         clientReader <- jsonRpcServer.out.evalMap(m => clientIn.update(_ :+ m)).compile.drain.start
-        clientOut <- Queue.unbounded[IO, JsonRpc.Message]
+        clientOut <- Queue.unbounded[IO, JsonRpc.MessageEnvelope]
         clientWriter <- jsonRpcServer.handler(fs2.Stream.fromQueueUnterminated(clientOut)).compile.drain.start
         controller =
           Controller(serverRequestIn, serverNotificationIn, serverErrors, serverCancelled, clientIn, clientOut, comms)

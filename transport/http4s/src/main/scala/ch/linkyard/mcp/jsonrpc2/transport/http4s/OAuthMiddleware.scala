@@ -28,7 +28,7 @@ class OAuthMiddleware(
         req.headers.get[headers.Authorization] match {
           case Some(headers.Authorization(Credentials.Token(AuthScheme.Bearer, token))) =>
             validateToken(token).flatMap {
-              case true  => routes(req).value
+              case true  => routes(req.withAttribute(AuthenticationTokenAttribute, token)).value
               case false => unauthorizedResponse(req).map(Some(_))
             }
           case _ => unauthorizedResponse(req).map(Some(_))

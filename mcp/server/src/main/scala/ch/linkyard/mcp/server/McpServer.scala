@@ -6,6 +6,7 @@ import cats.effect.implicits.*
 import cats.effect.kernel.Async
 import cats.effect.kernel.Resource as CEResource
 import cats.implicits.*
+import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnectionHandler
@@ -30,8 +31,8 @@ import io.circe.JsonObject
 import io.circe.syntax.*
 
 trait McpServer[F[_]]:
-  /** Open a session, see the sub-trait of Session for the capabilities like tools, etc. */
-  def connect(client: McpServer.Client[F]): CEResource[F, McpServer.Session[F]]
+  /** Initialize the session, see the sub-trait of Session for the capabilities like tools, etc. */
+  def initialize(client: McpServer.Client[F]): CEResource[F, McpServer.Session[F]]
 
 object McpServer:
   extension [F[_]](server: McpServer[F])
@@ -56,6 +57,9 @@ object McpServer:
   trait Client[F[_]]:
     val clientInfo: PartyInfo
     val capabilities: ClientCapabilities
+
+    /** the clients authentication (is kept up to date if the clients sends new bearer tokens) */
+    def authentication: F[Authentication]
 
     /** Pings the client to check if it is still alive. */
     def ping: F[Unit]

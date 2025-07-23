@@ -21,7 +21,7 @@ import ch.linkyard.mcp.server.ResourceTemplate
 import ch.linkyard.mcp.server.ToolFunction
 
 class DemoServer extends McpServer[IO]:
-  override def connect(client: McpServer.Client[IO]): Resource[IO, McpServer.Session[IO]] =
+  override def initialize(client: McpServer.Client[IO]): Resource[IO, McpServer.Session[IO]] =
     Resource.pure(DemoSession(client))
 
   private class DemoSession(client: McpServer.Client[IO]) extends McpServer.Session[IO] with McpServer.ToolProvider[IO]

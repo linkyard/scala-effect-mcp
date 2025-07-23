@@ -10,9 +10,11 @@ import cats.effect.kernel.Ref
 import cats.effect.kernel.Sync
 import cats.effect.std.Queue
 import cats.implicits.*
+import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.Message
+import ch.linkyard.mcp.jsonrpc2.JsonRpc.MessageEnvelope
 import ch.linkyard.mcp.jsonrpc2.JsonRpcServer
 import ch.linkyard.mcp.protocol.*
 import ch.linkyard.mcp.protocol.ClientNotification
@@ -31,8 +33,8 @@ import java.util.UUID
 /** Lower level server that just deals with request/response correlation and does not care about the individual messages
   */
 trait LowlevelMcpServer[F[_]]:
-  def handleRequest(request: ClientRequest, id: RequestId): F[ServerResponse]
-  def handleNotification(notification: ClientNotification): F[Unit]
+  def handleRequest(request: ClientRequest, id: RequestId, auth: Authentication): F[ServerResponse]
+  def handleNotification(notification: ClientNotification, auth: Authentication): F[Unit]
 
 object LowlevelMcpServer:
   /** The 'callback' interface for the servers (how it can send things to the client) */
@@ -68,9 +70,9 @@ object LowlevelMcpServer:
       .map((stateRef, outQueue) => (stateRef, outQueue, Comms[F](stateRef, outQueue)))
       .flatMap((stateRef, outQueue, comms) => createServer(comms).map((server) => (stateRef, outQueue, server)))
       .map((stateRef, outQueue, server) =>
-        def processRequest(id: RequestId, request: ClientRequest): F[Unit] =
+        def processRequest(id: RequestId, request: ClientRequest, auth: Authentication): F[Unit] =
           for
-            fiber <- server.handleRequest(request, id)
+            fiber <- server.handleRequest(request, id, auth)
               .map(Codec.encodeResponse(id, _))
               .handleError {
                 case McpError.McpErrorException(error) =>
@@ -85,11 +87,11 @@ object LowlevelMcpServer:
           yield ()
 
         new JsonRpcServer[F]:
-          override def handler: Pipe[F, JsonRpc.Message, JsonRpc.Message] = _.flatMap {
-            case request: JsonRpc.Request =>
+          override def handler: Pipe[F, JsonRpc.MessageEnvelope, JsonRpc.Message] = _.flatMap {
+            case MessageEnvelope(auth, request: JsonRpc.Request) =>
               Codec.fromJsonRpc(request) match {
                 case Right((id, request: ClientRequest)) =>
-                  fs2.Stream.exec(processRequest(id, request))
+                  fs2.Stream.exec(processRequest(id, request, auth))
                 case Right((id, _)) =>
                   fs2.Stream.emit(JsonRpc.Response.Error(
                     request.id,
@@ -100,14 +102,14 @@ object LowlevelMcpServer:
                 case Left(e) =>
                   fs2.Stream.emit(JsonRpc.Response.Error(request.id, ErrorCode.ParseError, e.getMessage, None))
               }
-            case response: JsonRpc.Response =>
+            case MessageEnvelope(_, response: JsonRpc.Response) =>
               fs2.Stream.exec(stateRef.get.flatMap(_.handleResponse(response)))
-            case notification: JsonRpc.Notification =>
+            case MessageEnvelope(auth, notification: JsonRpc.Notification) =>
               fs2.Stream.exec(Codec.fromJsonRpc(notification) match {
                 case Right(cancel: Cancelled) =>
                   stateRef.get.flatMap(_.cancelResponseProcessing(cancel.requestId))
                 case Right(notification: ClientNotification) =>
-                  server.handleNotification(notification)
+                  server.handleNotification(notification, auth)
                 case Right(other) =>
                   onError(DecodingFailure(
                     s"Expected client notification but got server notification ${other.method.key}",

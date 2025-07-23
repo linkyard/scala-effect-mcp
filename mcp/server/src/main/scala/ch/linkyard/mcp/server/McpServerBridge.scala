@@ -4,6 +4,7 @@ import cats.effect.kernel.Async
 import cats.effect.kernel.Ref
 import cats.effect.kernel.Resource
 import cats.implicits.*
+import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.protocol.*
 import ch.linkyard.mcp.protocol.Cancelled
@@ -46,10 +47,10 @@ private object McpServerBridge:
   type SwitchTo[F[_]] = Phase[F] => F[Unit]
 
   private class Bridge[F[_]: Async](state: Ref[F, Phase[F]]) extends LowlevelMcpServer[F]:
-    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] =
-      state.get.flatMap(_.handleRequest(request, requestId))
-    override def handleNotification(notification: ClientNotification): F[Unit] =
-      state.get.flatMap(_.handleNotification(notification))
+    override def handleRequest(request: ClientRequest, requestId: RequestId, auth: Authentication): F[ServerResponse] =
+      state.get.flatMap(_.handleRequest(request, requestId, auth))
+    override def handleNotification(notification: ClientNotification, auth: Authentication): F[Unit] =
+      state.get.flatMap(_.handleNotification(notification, auth))
     def switchTo(newState: Phase[F]): F[Unit] =
       state.getAndSet(newState).flatMap(_.cleanup)
     def cleanup: F[Unit] = state.set(null).void
@@ -92,12 +93,12 @@ private object McpServerBridge:
     comms: LowlevelMcpServer.Communication[F],
     switchTo: SwitchTo[F],
   ) extends Phase[F]:
-    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] =
+    override def handleRequest(request: ClientRequest, requestId: RequestId, auth: Authentication): F[ServerResponse] =
       request match
         case init: Initialize =>
           for
-            client <- McpServerClientRepr[F](init, comms)
-            (session, cleanup) <- server.connect(client).allocated
+            client <- McpServerClientRepr[F](init, comms, auth)
+            (session, cleanup) <- server.initialize(client).allocated
             _ <- switchTo(PhaseInitializing(session, client, cleanup, comms, switchTo))
             instructions <- session.instructions
             response = Initialize.Response(
@@ -111,7 +112,7 @@ private object McpServerBridge:
             ErrorCode.MethodNotFound,
             "Unexpected request during initialization phase: " + other.method.key,
           ).widen
-    override def handleNotification(notification: ClientNotification): F[Unit] = Async[F].unit // ignore everything
+    override def handleNotification(notification: ClientNotification, auth: Authentication): F[Unit] = Async[F].unit // ignore everything
     override def cleanup: F[Unit] = Async[F].unit
 
   /** Server has been initialized, and is ready to start handling requests. */
@@ -122,24 +123,27 @@ private object McpServerBridge:
     comms: LowlevelMcpServer.Communication[F],
     switchTo: SwitchTo[F],
   ) extends Phase[F]:
-    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] = request match
-      case init: Initialize =>
-        for
-          instructions <- session.instructions
-        yield Initialize.Response(
-          serverInfo = session.serverInfo,
-          capabilities = capabilitiesFor(session),
-          instructions = instructions,
-        )
-      case _: Ping => Ping.Response().pure
-      case other => McpError.raise(
-          ErrorCode.InvalidRequest,
-          "Unexpected request during initialization phase: " + other.method.key,
-        ).widen
-    override def handleNotification(notification: ClientNotification): F[Unit] = notification match
-      case Initialized(_) =>
-        PhaseRunning(session, client, cleanup, comms).flatMap(switchTo)
-      case other => Async[F].unit // ignore everything
+    override def handleRequest(request: ClientRequest, requestId: RequestId, auth: Authentication): F[ServerResponse] =
+      client.updateAuthentication(auth) >> (request match
+        case init: Initialize =>
+          for
+            instructions <- session.instructions
+          yield Initialize.Response(
+            serverInfo = session.serverInfo,
+            capabilities = capabilitiesFor(session),
+            instructions = instructions,
+          )
+        case _: Ping => Ping.Response().pure
+        case other => McpError.raise(
+            ErrorCode.InvalidRequest,
+            "Unexpected request during initialization phase: " + other.method.key,
+          ).widen)
+    override def handleNotification(notification: ClientNotification, auth: Authentication): F[Unit] =
+      client.updateAuthentication(auth) >> (notification match
+          case Initialized(_) =>
+            PhaseRunning(session, client, cleanup, comms).flatMap(switchTo)
+          case other => Async[F].unit // ignore everything
+      )
 
   /** Server has been initialized, and is ready to start handling requests. */
   private class PhaseRunning[F[_]: Async] private (
@@ -170,127 +174,130 @@ private object McpServerBridge:
         override val meta: Meta = _meta
       }
 
-    override def handleRequest(request: ClientRequest, requestId: RequestId): F[ServerResponse] = request match
-      case Tool.ListTools(_, _) => session match {
-          case session: ToolProvider[F] => session.tools.map(_.map(tool =>
-              Tool(
-                name = tool.name,
-                title = tool.info.title,
-                description = tool.info.description,
-                inputSchema = tool.argsSchema,
-                outputSchema = tool.resultSchema,
-                annotations = Tool.Annotations(
+    override def handleRequest(request: ClientRequest, requestId: RequestId, auth: Authentication): F[ServerResponse] =
+      client.updateAuthentication(auth) >> (request match
+        case Tool.ListTools(_, _) => session match {
+            case session: ToolProvider[F] => session.tools.map(_.map(tool =>
+                Tool(
+                  name = tool.name,
                   title = tool.info.title,
-                  readOnlyHint = tool.info.isReadOnly.some,
-                  destructiveHint = tool.info.isDestructive.some,
-                  idempotentHint = tool.info.isIdempotent.some,
-                  openWorldHint = tool.info.isOpenWorld.some,
-                ).some,
-              )
-            )).map(tools => Tool.ListTools.Response(tools, nextCursor = None))
-          case _ => unsupported
-        }
-      case Tool.CallTool(name, arguments, _meta) => session match {
-          case session: ToolProvider[F] =>
-            for
-              tool <- session.tools
-                .flatMap(_.find(_.name == name)
-                  .toRight(McpError.error(ErrorCode.InvalidRequest, s"Tool $name not found")).liftTo[F])
-              context = createCallContext(s"tool/${tool.name}", _meta, requestId)
-              response <- tool.apply(arguments, context)
-            yield response
-          case _ => unsupported
-        }
-      case Prompts.ListPrompts(cursor, _meta) => session match
-          case session: PromptProvider[F] => session.prompts.map(_.map(_.prompt))
-              .map(Prompts.ListPrompts.Response(_, None))
-          case _ => unsupported
-      case Prompts.GetPrompt(name, arguments, _meta) => session match
-          case session: PromptProvider[F] =>
-            for
-              prompt <- session.prompts.flatMap(_.find(_.prompt.name == name)
-                .toRight(McpError.error(ErrorCode.InvalidRequest, s"Prompt $name not found")).liftTo[F])
-              context = createCallContext(s"prompt/$name", _meta, requestId)
-              response <- prompt.get(arguments.getOrElse(Map.empty), context)
-            yield response
-          case _ => unsupported
-      case Resources.ListResources(cursor, _meta) => session match
-          case session: ResourceProvider[F] =>
-            for
-              resourceList <- session.resources(cursor).take(session.maxPageSize).compile.toList
-              lastCursor = resourceList.lastOption.map(_._1)
-              resources = resourceList.map(_._2)
-            yield Resources.ListResources.Response(resources, nextCursor = lastCursor)
-          case _ => unsupported
-      case Resources.ListResourceTemplates(cursor, _meta) => session match
-          case session: ResourceProvider[F] =>
-            for
-              resourceList <- session.resourceTemplates(cursor).take(session.maxPageSize).compile.toList
-              lastCursor = resourceList.lastOption.map(_._1)
-              templates = resourceList.map(_._2.template)
-            yield Resources.ListResourceTemplates.Response(templates, nextCursor = lastCursor)
-          case _ => unsupported
-      case Resources.ReadResource(uri, _meta) => session match
-          case session: ResourceProvider[F] =>
-            val context = createCallContext(s"resource/$uri", _meta, requestId)
-            session.resource(uri, context).widen
-          case _ => unsupported
-      case Resources.Subscribe(uri, _meta) => session match
-          case session: ResourceSubscriptionProvider[F] =>
-            for
-              context = createCallContext("resource/subription", _meta, requestId)
-              fibre <- session.resourceSubscription(uri, context)
-                .evalMap(updated => comms.notify(Resources.Updated(uri, updated.meta)))
-                .compile.drain.start
-              unsubscribe = fibre.cancel
-              before <- activeSubscriptions.getAndUpdate(subs => subs + (uri -> unsubscribe))
-              _ <- before.get(uri).traverse(identity) // unsubscribe old subscription
-            yield Resources.Subscribe.Response()
-          case _ => unsupported
-      case Resources.Unsubscribe(uri, _meta) => session match
-          case session: ResourceSubscriptionProvider[F] =>
-            activeSubscriptions.modify(subs => (subs - uri, subs.get(uri)))
-              .map(_.traverse(identity)) // unsubscribe
-              .as(Resources.Unsubscribe.Response())
-          case _ => unsupported
-      case Completion.Complete(ref, argument, context, _meta) =>
-        val completion = ref match
-          case CompletionReference.PromptReference(name, _) => session match {
-              case session: PromptProvider[F] =>
-                session.prompt(name).flatMap(
-                  _.argumentCompletions(
+                  description = tool.info.description,
+                  inputSchema = tool.argsSchema,
+                  outputSchema = tool.resultSchema,
+                  annotations = Tool.Annotations(
+                    title = tool.info.title,
+                    readOnlyHint = tool.info.isReadOnly.some,
+                    destructiveHint = tool.info.isDestructive.some,
+                    idempotentHint = tool.info.isIdempotent.some,
+                    openWorldHint = tool.info.isOpenWorld.some,
+                  ).some,
+                )
+              )).map(tools => Tool.ListTools.Response(tools, nextCursor = None))
+            case _ => unsupported
+          }
+        case Tool.CallTool(name, arguments, _meta) => session match {
+            case session: ToolProvider[F] =>
+              for
+                tool <- session.tools
+                  .flatMap(_.find(_.name == name)
+                    .toRight(McpError.error(ErrorCode.InvalidRequest, s"Tool $name not found")).liftTo[F])
+                context = createCallContext(s"tool/${tool.name}", _meta, requestId)
+                response <- tool.apply(arguments, context)
+              yield response
+            case _ => unsupported
+          }
+        case Prompts.ListPrompts(cursor, _meta) => session match
+            case session: PromptProvider[F] => session.prompts.map(_.map(_.prompt))
+                .map(Prompts.ListPrompts.Response(_, None))
+            case _ => unsupported
+        case Prompts.GetPrompt(name, arguments, _meta) => session match
+            case session: PromptProvider[F] =>
+              for
+                prompt <- session.prompts.flatMap(_.find(_.prompt.name == name)
+                  .toRight(McpError.error(ErrorCode.InvalidRequest, s"Prompt $name not found")).liftTo[F])
+                context = createCallContext(s"prompt/$name", _meta, requestId)
+                response <- prompt.get(arguments.getOrElse(Map.empty), context)
+              yield response
+            case _ => unsupported
+        case Resources.ListResources(cursor, _meta) => session match
+            case session: ResourceProvider[F] =>
+              for
+                resourceList <- session.resources(cursor).take(session.maxPageSize).compile.toList
+                lastCursor = resourceList.lastOption.map(_._1)
+                resources = resourceList.map(_._2)
+              yield Resources.ListResources.Response(resources, nextCursor = lastCursor)
+            case _ => unsupported
+        case Resources.ListResourceTemplates(cursor, _meta) => session match
+            case session: ResourceProvider[F] =>
+              for
+                resourceList <- session.resourceTemplates(cursor).take(session.maxPageSize).compile.toList
+                lastCursor = resourceList.lastOption.map(_._1)
+                templates = resourceList.map(_._2.template)
+              yield Resources.ListResourceTemplates.Response(templates, nextCursor = lastCursor)
+            case _ => unsupported
+        case Resources.ReadResource(uri, _meta) => session match
+            case session: ResourceProvider[F] =>
+              val context = createCallContext(s"resource/$uri", _meta, requestId)
+              session.resource(uri, context).widen
+            case _ => unsupported
+        case Resources.Subscribe(uri, _meta) => session match
+            case session: ResourceSubscriptionProvider[F] =>
+              for
+                context = createCallContext("resource/subription", _meta, requestId)
+                fibre <- session.resourceSubscription(uri, context)
+                  .evalMap(updated => comms.notify(Resources.Updated(uri, updated.meta)))
+                  .compile.drain.start
+                unsubscribe = fibre.cancel
+                before <- activeSubscriptions.getAndUpdate(subs => subs + (uri -> unsubscribe))
+                _ <- before.get(uri).traverse(identity) // unsubscribe old subscription
+              yield Resources.Subscribe.Response()
+            case _ => unsupported
+        case Resources.Unsubscribe(uri, _meta) => session match
+            case session: ResourceSubscriptionProvider[F] =>
+              activeSubscriptions.modify(subs => (subs - uri, subs.get(uri)))
+                .map(_.traverse(identity)) // unsubscribe
+                .as(Resources.Unsubscribe.Response())
+            case _ => unsupported
+        case Completion.Complete(ref, argument, context, _meta) =>
+          val completion = ref match
+            case CompletionReference.PromptReference(name, _) => session match {
+                case session: PromptProvider[F] =>
+                  session.prompt(name).flatMap(
+                    _.argumentCompletions(
+                      argument.name,
+                      argument.value,
+                      context.flatMap(_.arguments).getOrElse(Map.empty),
+                      createCallContext(s"completion/prompt", _meta, requestId),
+                    )
+                  )
+                case _ => Completion(Nil).pure
+              }
+            case CompletionReference.ResourceTemplateReference(uri) => session match {
+                case session: ResourceProvider[F] =>
+                  session.resourceTemplate(uri).flatMap(_.completions(
                     argument.name,
                     argument.value,
                     context.flatMap(_.arguments).getOrElse(Map.empty),
                     createCallContext(s"completion/prompt", _meta, requestId),
-                  )
-                )
-              case _ => Completion(Nil).pure
-            }
-          case CompletionReference.ResourceTemplateReference(uri) => session match {
-              case session: ResourceProvider[F] =>
-                session.resourceTemplate(uri).flatMap(_.completions(
-                  argument.name,
-                  argument.value,
-                  context.flatMap(_.arguments).getOrElse(Map.empty),
-                  createCallContext(s"completion/prompt", _meta, requestId),
-                ))
-              case _ => Completion(Nil).pure
-            }
-        completion.map(Completion.Complete.Response(_))
-      case Logging.SetLevel(level, _) =>
-        client.setLogLevel(level).as(Logging.SetLevel.Response())
-      case Ping(_) => Ping.Response().pure
-      case _: Initialize =>
-        McpError.raise(ErrorCode.InvalidRequest, "Unexpected initialize request during running phase").widen
+                  ))
+                case _ => Completion(Nil).pure
+              }
+          completion.map(Completion.Complete.Response(_))
+        case Logging.SetLevel(level, _) =>
+          client.setLogLevel(level).as(Logging.SetLevel.Response())
+        case Ping(_) => Ping.Response().pure
+        case _: Initialize =>
+          McpError.raise(ErrorCode.InvalidRequest, "Unexpected initialize request during running phase").widen)
 
-    override def handleNotification(notification: ClientNotification): F[Unit] = notification match
-      case Roots.ListChanged(_meta) => session match
-          case s: RootChangeAwareProvider[F] => s.rootsChanged
-          case _                             => Async[F].unit
-      case ProgressNotification(progressToken, progress, total, message, _meta) => Async[F].unit // not supported by api
-      case _: Cancelled   => Async[F].unit // handled by the low level server
-      case _: Initialized => Async[F].unit // just ignore it, we are already initialized...
+    override def handleNotification(notification: ClientNotification, auth: Authentication): F[Unit] =
+      client.updateAuthentication(auth) >> (notification match
+          case Roots.ListChanged(_meta) => session match
+              case s: RootChangeAwareProvider[F] => s.rootsChanged
+              case _                             => Async[F].unit
+          case ProgressNotification(progressToken, progress, total, message, _meta) => Async[F].unit // not supported by api
+          case _: Cancelled   => Async[F].unit // handled by the low level server
+          case _: Initialized => Async[F].unit // just ignore it, we are already initialized...
+      )
   end PhaseRunning
   private object PhaseRunning:
     def apply[F[_]: Async](

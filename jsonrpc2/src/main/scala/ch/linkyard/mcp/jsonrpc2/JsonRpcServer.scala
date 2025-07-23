@@ -5,7 +5,7 @@ import cats.effect.Resource
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 
 trait JsonRpcServer[F[_]]:
-  def handler: fs2.Pipe[F, JsonRpc.Message, JsonRpc.Message]
+  def handler: fs2.Pipe[F, JsonRpc.MessageEnvelope, JsonRpc.Message]
   def out: fs2.Stream[F, JsonRpc.Message]
 end JsonRpcServer
 

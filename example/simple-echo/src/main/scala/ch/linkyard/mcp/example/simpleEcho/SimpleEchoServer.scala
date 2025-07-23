@@ -13,10 +13,8 @@ import com.melvinlow.json.schema.generic.auto.given
 import io.circe.generic.auto.given
 
 object SimpleEchoServer extends IOApp:
-  // Define the input/output types for your tool
   case class EchoInput(text: String)
 
-  // Create the echo tool function
   private def echoTool: ToolFunction[IO] = ToolFunction.text(
     ToolFunction.Info(
       "echo",
@@ -28,7 +26,6 @@ object SimpleEchoServer extends IOApp:
     (input: EchoInput, _) => IO(input.text),
   )
 
-  // Define your server session
   private class Session extends McpServer.Session[IO] with McpServer.ToolProvider[IO]:
     override val serverInfo: PartyInfo = PartyInfo(
       "Simple Echo MCP",
@@ -37,9 +34,8 @@ object SimpleEchoServer extends IOApp:
     override def instructions: IO[Option[String]] = None.pure
     override val tools: IO[List[ToolFunction[IO]]] = List(echoTool).pure
 
-  // Define your server
   private class Server extends McpServer[IO]:
-    override def connect(client: McpServer.Client[IO]): Resource[IO, McpServer.Session[IO]] =
+    override def initialize(client: McpServer.Client[IO]): Resource[IO, McpServer.Session[IO]] =
       Resource.pure(Session())
 
   override def run(args: List[String]): IO[ExitCode] =

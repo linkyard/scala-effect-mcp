@@ -140,6 +140,24 @@ lazy val exampleSimpleEcho = (project in file("example/simple-echo"))
   )
   .dependsOn(mcpServer, transportStdio)
 
+
+lazy val exampleSimpleAuthenticated = (project in file("example/simple-authenticated"))
+  .settings(
+    name := "example-simple-authenticated",
+    run / fork := true,
+    assembly / aggregate := true,
+    assembly / mainClass := Some("ch.linkyard.mcp.example.simpleAuthenticated.SimpleAuthenticatedServer"),
+    assembly / assemblyJarName := "simple-authenticated.jar",
+    assembly / test := {},
+    publish / skip := true,
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
+      "org.http4s" %% "http4s-ember-client" % Dependencies.http4s,
+    ),
+    libraryDependencies ++= Dependencies.logBinding,
+  )
+  .dependsOn(mcpServer, transportHttp4s)
+
 lazy val exampleDemo = (project in file("example/demo"))
   .settings(
     name := "example-demo",

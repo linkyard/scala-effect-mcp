@@ -11,7 +11,15 @@ import io.circe.syntax.*
 object JsonRpc:
   sealed trait Message
 
-  case class Request(id: Id, method: String, params: Option[JsonObject]) extends Message
+  case class MessageEnvelope(auth: Authentication, message: JsonRpc.Message):
+    override def toString(): String = message.toString() // do not expose the auth
+
+  extension (m: JsonRpc.Message)
+    def withAuth(auth: Authentication): MessageEnvelope = MessageEnvelope(auth, m)
+    def withoutAuth: MessageEnvelope = MessageEnvelope(Authentication.Anonymous, m)
+
+  case class Request(id: Id, method: String, params: Option[JsonObject]) extends Message:
+    override def toString(): String = this.asJson.noSpaces
   object Request:
     given Encoder[Request] = Message.given_Encoder_Message.contramap(identity)
     given Decoder[Request] = Message.given_Decoder_Message.emap(_ match
@@ -21,8 +29,10 @@ object JsonRpc:
   sealed trait Response extends Message:
     def id: Id
   object Response:
-    case class Success(id: Id, result: JsonObject) extends Response
-    case class Error(id: Id, code: ErrorCode, message: String, data: Option[Json]) extends Response
+    case class Success(id: Id, result: JsonObject) extends Response:
+      override def toString(): String = this.asJson.noSpaces
+    case class Error(id: Id, code: ErrorCode, message: String, data: Option[Json]) extends Response:
+      override def toString(): String = this.asJson.noSpaces
 
     given Encoder[Response] = Message.given_Encoder_Message.contramap(identity)
     given Decoder[Response] = Message.given_Decoder_Message.emap(_ match
@@ -38,7 +48,8 @@ object JsonRpc:
       case e: Error => Right(e)
       case other    => Left(s"Not a JSONRPC Error Response"))
 
-  case class Notification(method: String, params: Option[JsonObject]) extends Message
+  case class Notification(method: String, params: Option[JsonObject]) extends Message:
+    override def toString(): String = this.asJson.noSpaces
   object Notification:
     given Encoder[Notification] = Message.given_Encoder_Message.contramap(identity)
     given Decoder[Notification] = Message.given_Decoder_Message.emap(_ match

@@ -13,13 +13,13 @@ class LineBasedJsonRpcConnection[F[_]: Async](
   input: Stream[F, Byte],
   output: Pipe[F, Byte, Unit],
 ) extends JsonRpcConnection[F]:
-  override def in: Stream[F, JsonRpc.Message] = input
+  override def in: Stream[F, JsonRpc.MessageEnvelope] = input
     .through(text.utf8.decode)
     .through(text.lines)
     .filter(_.nonEmpty)
     .evalMap { line =>
       io.circe.parser.decode[JsonRpc.Message](line) match
-        case Right(a) => a.pure
+        case Right(a) => a.withoutAuth.pure
         case Left(e)  => Async[F].raiseError(e)
     }
 

@@ -1,6 +1,7 @@
 package ch.linkyard.mcp.jsonrpc2.transport.http4s
 
 import cats.effect.IO
+import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.Notification
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnectionHandler
@@ -16,15 +17,17 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 object McpServerRoute:
   private given Logger[IO] = Slf4jLogger.getLogger[IO]
 
-  def route(handler: JsonRpcConnectionHandler[IO], root: Path = Root)(using store: SessionStore[IO]): HttpRoutes[IO] =
+  def route[Auth](handler: JsonRpcConnectionHandler[IO], root: Path = Root)(using
+    store: SessionStore[IO]
+  ): HttpRoutes[IO] =
     HttpRoutes.of[IO] {
       case req @ POST -> `root` / "mcp" => req.attemptAs[JsonRpc.Message].value.flatMap {
           case Right(init @ JsonRpc.Request(_, "initialize", _)) =>
             Logger[IO].trace(s"Opening new session for ${init.asJson.noSpaces}") >>
-              openSession(init, handler)
+              openSession(init, handler, req.authentication)
           case Right(message) =>
             Logger[IO].trace(s"Received request ${message.asJson.noSpaces}") >>
-              withSession(req)(conn => handleMessage(message, conn))
+              withSession(req)(conn => handleMessage(message, conn, req.authentication))
           case Left(decodeFailure) =>
             Logger[IO].info(s"Failed to decode a message: ${decodeFailure.getMessage}") >>
               BadRequest(s"Invalid json rpc message: ${decodeFailure.getMessage}")
@@ -42,7 +45,7 @@ object McpServerRoute:
           case None => BadRequest("no session id provided")
     }
 
-  private def openSession(init: JsonRpc.Request, handler: JsonRpcConnectionHandler[IO])(using
+  private def openSession(init: JsonRpc.Request, handler: JsonRpcConnectionHandler[IO], auth: Authentication)(using
     store: SessionStore[IO]
   ): IO[Response[IO]] =
     for
@@ -50,18 +53,22 @@ object McpServerRoute:
       (_, cleanup) <- handler.open(conn.connection).allocated
       _ <- store.open(conn, cleanup)
       _ <- Logger[IO].info(s"Opening new session ${conn.sessionId}")
-      _ <- conn.receivedFromClient(init)
+      _ <- conn.receivedFromClient(init.withAuth(auth))
       response <- streamUntilResponse(init.id, conn)
     yield response
   end openSession
 
-  private def handleMessage(message: JsonRpc.Message, conn: StatefulConnection[IO]): IO[Response[IO]] = message match
+  private def handleMessage(
+    message: JsonRpc.Message,
+    conn: StatefulConnection[IO],
+    auth: Authentication,
+  ): IO[Response[IO]] = message match
     case request: JsonRpc.Request =>
-      conn.receivedFromClient(request) >> streamUntilResponse(request.id, conn)
+      conn.receivedFromClient(request.withAuth(auth)) >> streamUntilResponse(request.id, conn)
     case response: JsonRpc.Response => // no response or follow ups expected
-      conn.receivedFromClient(response) >> NoContent()
+      conn.receivedFromClient(response.withAuth(auth)) >> NoContent()
     case notification: Notification => // no response or follow ups expected
-      conn.receivedFromClient(notification) >> NoContent()
+      conn.receivedFromClient(notification.withAuth(auth)) >> NoContent()
   end handleMessage
 
   private def streamUntilResponse(

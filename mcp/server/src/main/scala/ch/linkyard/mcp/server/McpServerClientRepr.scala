@@ -3,6 +3,7 @@ package ch.linkyard.mcp.server
 import cats.effect.kernel.Async
 import cats.effect.kernel.Ref
 import cats.implicits.*
+import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.protocol.*
 import ch.linkyard.mcp.protocol.Initialize.ClientCapabilities
@@ -14,10 +15,25 @@ import io.circe.syntax.*
 private class McpServerClientRepr[F[_]: Async] private (
   client: Initialize,
   comms: LowlevelMcpServer.Communication[F],
+  authenticationRef: Ref[F, Authentication],
   logLevelRef: Ref[F, LoggingLevel],
 ) extends McpServer.Client[F]:
   override val clientInfo: PartyInfo = client.clientInfo
   override val capabilities: ClientCapabilities = client.capabilities
+
+  override def authentication: F[Authentication] =
+    authenticationRef.get
+
+  private[server] def updateAuthentication(auth: Authentication): F[Unit] =
+    authenticationRef.modify(old =>
+      (old, auth) match
+        case (Authentication.Anonymous, Authentication.Anonymous)           => (auth, true)
+        case (Authentication.BearerToken(_), Authentication.BearerToken(_)) => (auth, true)
+        case _                                                              => (old, false)
+    ).ifM(
+      ().pure[F],
+      McpError.raise(ErrorCode.InvalidRequest, "Cannot change authentication mode after initialization").void,
+    )
 
   override def ping: F[Unit] = comms.request(Ping()).liftToF.void
 
@@ -71,5 +87,12 @@ private class McpServerClientRepr[F[_]: Async] private (
     else McpError.raise(ErrorCode.MethodNotFound, "Elicitation is not supported by this MCP client").widen
 
 object McpServerClientRepr:
-  def apply[F[_]: Async](client: Initialize, comms: LowlevelMcpServer.Communication[F]): F[McpServerClientRepr[F]] =
-    Ref.of[F, LoggingLevel](LoggingLevel.Info).map(new McpServerClientRepr[F](client, comms, _))
+  def apply[F[_]: Async](
+    client: Initialize,
+    comms: LowlevelMcpServer.Communication[F],
+    auth: Authentication,
+  ): F[McpServerClientRepr[F]] =
+    for
+      logLevelRef <- Ref.of[F, LoggingLevel](LoggingLevel.Info)
+      authRef <- Ref.of[F, Authentication](auth)
+    yield new McpServerClientRepr[F](client, comms, authRef, logLevelRef)

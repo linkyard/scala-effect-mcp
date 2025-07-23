@@ -12,9 +12,10 @@ class StreamBasedJsonRpcConnection[F[_]: Async](
   input: Stream[F, Byte],
   output: Pipe[F, Byte, Unit],
 ) extends JsonRpcConnection[F]:
-  override def in: Stream[F, JsonRpc.Message] = input
+  override def in: Stream[F, JsonRpc.MessageEnvelope] = input
     .through(HeaderBasedFraming.parseFrames)
     .evalMap(s => Async[F].fromEither(decode[JsonRpc.Message](s).left.map(err => new Exception(err))))
+    .map(_.withoutAuth)
 
   override def out: Pipe[F, JsonRpc.Message, Unit] = _
     .map(_.asJson.noSpaces)

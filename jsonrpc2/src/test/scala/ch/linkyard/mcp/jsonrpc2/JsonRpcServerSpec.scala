@@ -16,20 +16,20 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers with EitherValues {
   describe("JsonRpcServer.start") {
     // Mock JsonRpcConnection for testing
     case class MockJsonRpcConnection(
-      inStream: Stream[IO, Message],
+      inStream: Stream[IO, MessageEnvelope],
       outPipe: Pipe[IO, Message, Unit],
       outMessages: Ref[IO, List[Message]],
     ) extends JsonRpcConnection[IO] {
-      def in: Stream[IO, Message] = inStream
+      def in: Stream[IO, MessageEnvelope] = inStream
       def out: Pipe[IO, Message, Unit] = outPipe
     }
 
     // Mock JsonRpcServer for testing
     case class MockJsonRpcServer(
-      handlerPipe: Pipe[IO, Message, Message],
+      handlerPipe: Pipe[IO, MessageEnvelope, Message],
       outStream: Stream[IO, Message],
     ) extends JsonRpcServer[IO] {
-      def handler: Pipe[IO, Message, Message] = handlerPipe
+      def handler: Pipe[IO, MessageEnvelope, Message] = handlerPipe
       def out: Stream[IO, Message] = outStream
     }
 
@@ -37,7 +37,7 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers with EitherValues {
       inMessages: List[Message],
       outMessages: Ref[IO, List[Message]],
     ): MockJsonRpcConnection = {
-      val inStream = Stream.emits(inMessages)
+      val inStream = Stream.emits(inMessages.map(_.withoutAuth))
       val outPipe: Pipe[IO, Message, Unit] = stream =>
         stream.evalMap(msg => outMessages.update(_ :+ msg))
       MockJsonRpcConnection(inStream, outPipe, outMessages)
@@ -47,8 +47,8 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers with EitherValues {
       handlerResponses: Map[Message, Message] = Map.empty,
       outMessages: List[Message] = Nil,
     ): MockJsonRpcServer = {
-      val handlerPipe: Pipe[IO, Message, Message] = stream =>
-        stream.map(msg => handlerResponses.getOrElse(msg, msg))
+      val handlerPipe: Pipe[IO, MessageEnvelope, Message] = stream =>
+        stream.map(msg => handlerResponses.getOrElse(msg.message, msg.message))
       val outStream = Stream.emits(outMessages)
       MockJsonRpcServer(handlerPipe, outStream)
     }

@@ -12,7 +12,7 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 class StatefulConnection[F[_]: Async] private (
   val sessionId: SessionId,
-  inQueue: Queue[F, JsonRpc.Message],
+  inQueue: Queue[F, JsonRpc.MessageEnvelope],
   outGeneric: Queue[F, JsonRpc.Message],
   outRequestRelated: Ref[F, Map[JsonRpc.Id, Queue[F, Option[JsonRpc.Message]]]],
   capacity: Int,
@@ -31,7 +31,7 @@ class StatefulConnection[F[_]: Async] private (
 
         case None => outGeneric.offer(msg)
     )
-    override def in: fs2.Stream[F, JsonRpc.Message] = fs2.Stream.fromQueueUnterminated(inQueue)
+    override def in: fs2.Stream[F, JsonRpc.MessageEnvelope] = fs2.Stream.fromQueueUnterminated(inQueue)
 
   private def outQueue(id: JsonRpc.Id): F[Queue[F, Option[JsonRpc.Message]]] =
     outRequestRelated.get.map(_.get(id)).flatMap {
@@ -66,25 +66,25 @@ class StatefulConnection[F[_]: Async] private (
       .void
   end closeQueue
 
-  def receivedFromClient(message: JsonRpc.Message): F[Unit] =
-    Logger[F].debug(s"Received message ${message.asJson.noSpaces}")
+  def receivedFromClient(message: JsonRpc.MessageEnvelope): F[Unit] =
+    Logger[F].debug(s"Received message ${message.message.asJson.noSpaces}")
     inQueue.offer(message)
 
   def streamRequestReleated(id: JsonRpc.Id): fs2.Stream[F, JsonRpc.Message] =
     fs2.Stream.eval(outQueue(id))
       .flatMap(queue => fs2.Stream.fromQueueNoneTerminated(queue))
-      .evalTap(msg => Logger[F].debug(s"Sending message related to request ${id}: ${msg.asJson.noSpaces}"))
+      .evalTap(msg => Logger[F].debug(s"Sending message related to request ${id}: $msg"))
       .onFinalize(closeQueue(id))
 
   def streamNonRequestRelated: fs2.Stream[F, JsonRpc.Message] =
-    fs2.Stream.fromQueueUnterminated(inQueue)
-      .evalTap(msg => Logger[F].debug(s"Sending non request related message: ${msg.asJson.noSpaces}"))
+    fs2.Stream.fromQueueUnterminated(outGeneric)
+      .evalTap(msg => Logger[F].debug(s"Sending non request related message: $msg"))
 
 object StatefulConnection:
   def create[F[_]: Async](capacity: Int = 1000): F[StatefulConnection[F]] =
     for
       sessionId <- SessionId.generate
-      inQueue <- Queue.bounded[F, JsonRpc.Message](capacity)
+      inQueue <- Queue.bounded[F, JsonRpc.MessageEnvelope](capacity)
       outGeneric <- Queue.bounded[F, JsonRpc.Message](capacity)
       outRequestRelated <- Ref.of[F, Map[JsonRpc.Id, Queue[F, Option[JsonRpc.Message]]]](Map.empty)
       connection = new StatefulConnection[F](sessionId, inQueue, outGeneric, outRequestRelated, capacity)
