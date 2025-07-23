@@ -9,9 +9,9 @@ import ch.linkyard.mcp.server.McpServer
 import ch.linkyard.mcp.server.McpServer.Client
 import ch.linkyard.mcp.server.ToolFunction
 import ch.linkyard.mcp.server.ToolFunction.Effect
+import com.melvinlow.json.schema.annotation.JsonSchemaField
 import com.melvinlow.json.schema.generic.auto.given
 import io.circe.generic.auto.given
-import com.melvinlow.json.schema.annotation.JsonSchemaField
 import io.circe.syntax.*
 
 class TheServer extends McpServer[IO]:

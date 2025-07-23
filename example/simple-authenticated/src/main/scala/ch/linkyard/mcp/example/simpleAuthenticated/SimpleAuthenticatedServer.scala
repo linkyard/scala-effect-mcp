@@ -5,25 +5,21 @@ import cats.effect.IO
 import cats.effect.IOApp
 import cats.effect.kernel.Resource
 import cats.implicits.*
-import ch.linkyard.mcp.protocol.Initialize.PartyInfo
-import ch.linkyard.mcp.server.*
-import ch.linkyard.mcp.server.ToolFunction.Effect
-import com.melvinlow.json.schema.generic.auto.given
-import io.circe.generic.auto.given
-import org.typelevel.log4cats.Logger
-import org.typelevel.log4cats.slf4j.Slf4jLogger
-import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
-import scala.concurrent.duration.DurationInt
-import org.http4s.ember.client.EmberClientBuilder
-import org.http4s.client.Client
-import org.http4s.implicits.uri
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.McpServerRoute
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.OAuthAuthorizationServer
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.OAuthMiddleware
-import ch.linkyard.mcp.jsonrpc2.transport.http4s.McpServerRoute
-import org.http4s.ember.server.EmberServerBuilder
-import com.comcast.ip4s.Port
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
+import ch.linkyard.mcp.server.*
 import com.comcast.ip4s.Host
+import com.comcast.ip4s.Port
 import org.http4s.Uri
+import org.http4s.client.Client
+import org.http4s.ember.client.EmberClientBuilder
+import org.http4s.ember.server.EmberServerBuilder
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
+
+import scala.concurrent.duration.DurationInt
 
 object SimpleAuthenticatedServer extends IOApp:
   private given Logger[IO] = Slf4jLogger.getLogger[IO]

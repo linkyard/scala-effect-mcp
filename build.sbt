@@ -60,6 +60,7 @@ lazy val root = (project in file("."))
     mcpProtocol,
     mcpServer,
     exampleSimpleEcho,
+    exampleSimpleAuthenticated,
     exampleDemo,
     exampleDemoHttp,
   )
