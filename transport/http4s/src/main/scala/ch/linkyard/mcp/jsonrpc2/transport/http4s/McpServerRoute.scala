@@ -56,7 +56,7 @@ object McpServerRoute:
           for
             h <- req.serverHost
             host <- Host.fromString(h.value)
-            port = req.serverPort.getOrElse(req.scheme.defaultPort)
+            port = req.serverHostPort.getOrElse(req.scheme.defaultPort)
           yield (host -> port),
         client = req.clientIp,
         additional = Map.empty,

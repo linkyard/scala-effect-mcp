@@ -35,12 +35,15 @@ extension (req: Request[IO])
   def serverHost: Option[Host] =
     hostPort.map(_._1)
 
+  def serverHostPort: Option[Port] =
+    hostPort.flatMap(_._2)
+
   def serverRoot: Uri =
     Uri(
       scheme = req.scheme.some,
       authority = Uri.Authority(
         host = req.serverHost.getOrElse[Host](Uri.RegName("localhost")),
-        port = req.serverPort.map(_.value),
+        port = req.serverHostPort.filter(_ != req.scheme.defaultPort).map(_.value),
       ).some,
       path = Path.Root,
     )
