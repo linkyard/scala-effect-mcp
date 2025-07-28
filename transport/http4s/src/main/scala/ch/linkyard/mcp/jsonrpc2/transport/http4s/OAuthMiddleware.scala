@@ -15,10 +15,11 @@ class OAuthMiddleware(
   authorizationServers: List[Uri],
   scopes: List[String],
   validateToken: String => IO[Boolean],
+  root: Path = Root,
   audienceOverride: Option[Uri] = None,
 ):
   def protectMcp(mcpRoute: HttpRoutes[IO]): HttpRoutes[IO] = Kleisli { req =>
-    if req.uri.path.startsWithString("/mcp") then protect(mcpRoute).run(req)
+    if req.uri.path.startsWith(root / "mcp") then protect(mcpRoute).run(req)
     else mcpRoute.run(req)
   }
 

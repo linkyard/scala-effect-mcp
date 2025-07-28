@@ -38,15 +38,17 @@ object SimpleAuthenticatedServer extends IOApp:
       given SessionStore[IO] <- SessionStore.inMemory[IO](30.minutes)
       handler = TheServer().jsonRpcConnectionHandler(logError)
       given Client[IO] <- EmberClientBuilder.default[IO].build
+      root = Uri.Path.Root / "_api"
       authServer <- OAuthAuthorizationServer.fromOidcServer(idp)
       middleware =
         OAuthMiddleware(
           name = "simple-authenticated-server",
           authorizationServers = authServer.rootUri :: Nil,
           scopes = List("openid"),
-          t => t.nonEmpty.pure, // check the token here, using jwt signature check or whatelse
+          validateToken = t => t.nonEmpty.pure, // check the token here, using jwt signature check or whatelse
+          root = root,
         )
-      mcpRoute = McpServerRoute.route(handler)
+      mcpRoute = McpServerRoute.route(handler, root)
       route = middleware.wellKnownRoutes <+> authServer.route <+> middleware.protectMcp(mcpRoute)
       _ <- EmberServerBuilder.default[IO]
         .withHost(Host.fromString("127.0.0.1").get)
