@@ -136,7 +136,7 @@ object McpServer:
   trait ResourceSubscriptionProvider[F[_]] extends ResourceProviderWithChanges[F]:
     def resourceSubscription(uri: String, context: CallContext[F]): fs2.Stream[F, ResourceUpdated]
 
-  trait RootChangeAwareProvider[F[_]] extends ToolProvider[F]:
+  trait RootChangeAwareProvider[F[_]] extends Session[F]:
     def rootsChanged: F[Unit]
 
   case class ClientInfo(
