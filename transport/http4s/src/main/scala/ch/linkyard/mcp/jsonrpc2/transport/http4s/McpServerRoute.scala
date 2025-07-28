@@ -64,7 +64,7 @@ object McpServerRoute:
       conn <- StatefulConnection.create[IO](info)
       (_, cleanup) <- handler.open(conn.connection).allocated
       _ <- store.open(conn, cleanup)
-      _ <- Logger[IO].info(s"Opening new session ${conn.sessionId}")
+      _ <- Logger[IO].info(s"Opening new mcp session ${conn.sessionId}")
       _ <- conn.receivedFromClient(init.withAuth(req.authentication))
       response <- streamUntilResponse(init.id, conn)
     yield response
