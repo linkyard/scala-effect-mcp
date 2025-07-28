@@ -3,6 +3,7 @@ package ch.linkyard.mcp.jsonrpc2.transport.http4s
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.unsafe.implicits.global
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection.Info
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.StatefulConnection
 import org.scalatest.funspec.AnyFunSpec
@@ -13,7 +14,7 @@ class SessionStoreSpec extends AnyFunSpec {
   describe("SessionStore.InMemory") {
     it("should open, get, and close sessions") {
       val test = for {
-        conn <- StatefulConnection.create[IO](1)
+        conn <- StatefulConnection.create[IO](Info.Http(None, None, Map.empty), 1)
         cleanupCalled <- Ref.of[IO, Boolean](false)
         cleanup = cleanupCalled.set(true)
         storeR = SessionStore.inMemory[IO](10.seconds)
@@ -34,7 +35,7 @@ class SessionStoreSpec extends AnyFunSpec {
     }
     it("should remove session after idle timeout") {
       val test = for {
-        conn <- StatefulConnection.create[IO](1)
+        conn <- StatefulConnection.create[IO](Info.Http(None, None, Map.empty), 1)
         cleanupCalled <- Ref.of[IO, Boolean](false)
         cleanup = cleanupCalled.set(true)
         storeR = SessionStore.inMemory[IO](100.millis)

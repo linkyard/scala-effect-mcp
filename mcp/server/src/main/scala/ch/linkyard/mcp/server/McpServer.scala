@@ -32,24 +32,23 @@ import io.circe.syntax.*
 
 trait McpServer[F[_]]:
   /** Initialize the session, see the sub-trait of Session for the capabilities like tools, etc. */
-  def initialize(client: McpServer.Client[F]): CEResource[F, McpServer.Session[F]]
+  def initialize(client: McpServer.Client[F], info: McpServer.ConnectionInfo[F]): CEResource[F, McpServer.Session[F]]
 
 object McpServer:
   extension [F[_]](server: McpServer[F])
-    def lowlevelFactory(using Async[F]): Communication[F] => CEResource[F, LowlevelMcpServer[F]] =
-      comms => McpServerBridge[F](switchTo => McpServerBridge.PhaseInitial(server, comms, switchTo))
+    def lowlevelFactory(connectionInfo: JsonRpcConnection.Info)(using
+      Async[F]
+    ): Communication[F] => CEResource[F, LowlevelMcpServer[F]] =
+      comms => McpServerBridge[F](switchTo => McpServerBridge.PhaseInitial(server, comms, connectionInfo, switchTo))
 
     def jsonRpcConnectionHandler(logError: Exception => F[Unit])(using Async[F]): JsonRpcConnectionHandler[F] =
       new JsonRpcConnectionHandler[F]:
-        override def open(conn: JsonRpcConnection[F]): CEResource[F, Unit] =
-          server.start(CEResource.pure(conn), logError)
+        override def open(conn: JsonRpcConnection[F]): CEResource[F, Unit] = server.start(conn, logError)
     end jsonRpcConnectionHandler
 
-    def start(connection: CEResource[F, JsonRpcConnection[F]], logError: Exception => F[Unit])(using
-      Async[F]
-    ): CEResource[F, Unit] =
+    def start(connection: JsonRpcConnection[F], logError: Exception => F[Unit])(using Async[F]): CEResource[F, Unit] =
       for
-        jsonRpcServer <- LowlevelMcpServer.start(server.lowlevelFactory, logError)
+        jsonRpcServer <- LowlevelMcpServer.start(server.lowlevelFactory(connection.info), logError)
         _ <- CEResource.make(JsonRpcServer.start[F](jsonRpcServer, connection).useForever.start)(_.cancel)
       yield ()
     end start
@@ -57,9 +56,6 @@ object McpServer:
   trait Client[F[_]]:
     val clientInfo: PartyInfo
     val capabilities: ClientCapabilities
-
-    /** the clients authentication (is kept up to date if the clients sends new bearer tokens) */
-    def authentication: F[Authentication]
 
     /** Pings the client to check if it is still alive. */
     def ping: F[Unit]
@@ -97,10 +93,18 @@ object McpServer:
     ): F[Sampling.CreateMessage.Response]
   end Client
 
+  trait ConnectionInfo[F[_]]:
+    /** the clients authentication (is kept up to date if the clients sends new bearer tokens) */
+    def authentication: F[Authentication]
+
+    def connection: JsonRpcConnection.Info
+  end ConnectionInfo
+
   trait Session[F[_]]:
     val serverInfo: PartyInfo
     def instructions: F[Option[String]]
     protected[server] def maxPageSize: Int = 100
+  end Session
 
   // all the session traits
   trait ToolProvider[F[_]] extends Session[F]:

@@ -11,6 +11,6 @@ object StdioDemoMcpServer extends IOApp:
     // run with stdio transport
     IO(System.err.println("Welcome to Echo MCP")) >>
       DemoServer().start(
-        StdioJsonRpcConnection.resource[IO],
+        StdioJsonRpcConnection.create[IO],
         e => IO(System.err.println(s"Error: $e")),
       ).useForever.as(ExitCode.Success)

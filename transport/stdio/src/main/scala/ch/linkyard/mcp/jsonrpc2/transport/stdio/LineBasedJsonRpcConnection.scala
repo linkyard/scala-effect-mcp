@@ -12,6 +12,7 @@ import io.circe.syntax.*
 class LineBasedJsonRpcConnection[F[_]: Async](
   input: Stream[F, Byte],
   output: Pipe[F, Byte, Unit],
+  val info: JsonRpcConnection.Info,
 ) extends JsonRpcConnection[F]:
   override def in: Stream[F, JsonRpc.MessageEnvelope] = input
     .through(text.utf8.decode)

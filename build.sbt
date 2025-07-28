@@ -78,6 +78,7 @@ lazy val jsonrpc2 = (project in file("jsonrpc2"))
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % Dependencies.fs2,
       "io.circe" %% "circe-core" % Dependencies.circe,
+      "com.comcast" %% "ip4s-core" % Dependencies.ip4s,
     ),
   )
 

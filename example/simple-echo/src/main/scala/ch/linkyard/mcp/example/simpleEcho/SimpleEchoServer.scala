@@ -8,6 +8,8 @@ import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.transport.StdioJsonRpcConnection
 import ch.linkyard.mcp.protocol.Initialize.PartyInfo
 import ch.linkyard.mcp.server.*
+import ch.linkyard.mcp.server.McpServer.Client
+import ch.linkyard.mcp.server.McpServer.ConnectionInfo
 import ch.linkyard.mcp.server.ToolFunction.Effect
 import com.melvinlow.json.schema.generic.auto.given
 import io.circe.generic.auto.given
@@ -35,13 +37,13 @@ object SimpleEchoServer extends IOApp:
     override val tools: IO[List[ToolFunction[IO]]] = List(echoTool).pure
 
   private class Server extends McpServer[IO]:
-    override def initialize(client: McpServer.Client[IO]): Resource[IO, McpServer.Session[IO]] =
-      Resource.pure(Session())
+    override def initialize(client: Client[IO], info: ConnectionInfo[IO]): Resource[IO, McpServer.Session[IO]] = ???
+    Resource.pure(Session())
 
   override def run(args: List[String]): IO[ExitCode] =
     // run with stdio transport
     Server().start(
-      StdioJsonRpcConnection.resource[IO],
+      StdioJsonRpcConnection.create[IO],
       e => IO(System.err.println(s"Error: $e")),
     ).useForever.as(ExitCode.Success)
   end run

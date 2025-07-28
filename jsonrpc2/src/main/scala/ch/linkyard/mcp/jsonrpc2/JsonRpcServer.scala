@@ -12,14 +12,12 @@ end JsonRpcServer
 object JsonRpcServer:
   def start[F[_]: Concurrent](
     server: JsonRpcServer[F],
-    connection: Resource[F, JsonRpcConnection[F]],
+    connection: JsonRpcConnection[F],
   ): Resource[F, Unit] =
-    connection.flatMap { conn =>
-      val in = conn.in
-        .through(server.handler)
-        .through(conn.out)
-      val out = server.out
-        .through(conn.out)
-      val merged = in.merge[F, Unit](out)
-      merged.compile.resource.drain
-    }
+    val in = connection.in
+      .through(server.handler)
+      .through(connection.out)
+    val out = server.out
+      .through(connection.out)
+    val merged = in.merge[F, Unit](out)
+    merged.compile.resource.drain

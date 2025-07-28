@@ -6,6 +6,7 @@ import cats.effect.kernel.Resource
 import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
 import ch.linkyard.mcp.protocol.*
 import ch.linkyard.mcp.protocol.Cancelled
 import ch.linkyard.mcp.protocol.ClientNotification
@@ -91,15 +92,17 @@ private object McpServerBridge:
   class PhaseInitial[F[_]: Async](
     server: McpServer[F],
     comms: LowlevelMcpServer.Communication[F],
+    connectionInfo: JsonRpcConnection.Info,
     switchTo: SwitchTo[F],
   ) extends Phase[F]:
     override def handleRequest(request: ClientRequest, requestId: RequestId, auth: Authentication): F[ServerResponse] =
       request match
         case init: Initialize =>
           for
-            client <- McpServerClientRepr[F](init, comms, auth)
-            (session, cleanup) <- server.initialize(client).allocated
-            _ <- switchTo(PhaseInitializing(session, client, cleanup, comms, switchTo))
+            client <- McpServerClientRepr[F](init, comms)
+            connInfo <- ConnectionInfoRepr(auth, connectionInfo)
+            (session, cleanup) <- server.initialize(client, connInfo).allocated
+            _ <- switchTo(PhaseInitializing(session, client, connInfo, cleanup, comms, switchTo))
             instructions <- session.instructions
             response = Initialize.Response(
               serverInfo = session.serverInfo,
@@ -119,12 +122,13 @@ private object McpServerBridge:
   private class PhaseInitializing[F[_]: Async](
     session: McpServer.Session[F],
     client: McpServerClientRepr[F],
+    connInfo: ConnectionInfoRepr[F],
     val cleanup: F[Unit],
     comms: LowlevelMcpServer.Communication[F],
     switchTo: SwitchTo[F],
   ) extends Phase[F]:
     override def handleRequest(request: ClientRequest, requestId: RequestId, auth: Authentication): F[ServerResponse] =
-      client.updateAuthentication(auth) >> (request match
+      connInfo.updateAuthentication(auth) >> (request match
         case init: Initialize =>
           for
             instructions <- session.instructions
@@ -139,9 +143,9 @@ private object McpServerBridge:
             "Unexpected request during initialization phase: " + other.method.key,
           ).widen)
     override def handleNotification(notification: ClientNotification, auth: Authentication): F[Unit] =
-      client.updateAuthentication(auth) >> (notification match
+      connInfo.updateAuthentication(auth) >> (notification match
           case Initialized(_) =>
-            PhaseRunning(session, client, cleanup, comms).flatMap(switchTo)
+            PhaseRunning(session, client, connInfo, cleanup, comms).flatMap(switchTo)
           case other => Async[F].unit // ignore everything
       )
 
@@ -149,6 +153,7 @@ private object McpServerBridge:
   private class PhaseRunning[F[_]: Async] private (
     session: McpServer.Session[F],
     client: McpServerClientRepr[F],
+    connInfo: ConnectionInfoRepr[F],
     val cleanup: F[Unit],
     comms: LowlevelMcpServer.Communication[F],
     /** uri => unsubscribe */
@@ -175,7 +180,7 @@ private object McpServerBridge:
       }
 
     override def handleRequest(request: ClientRequest, requestId: RequestId, auth: Authentication): F[ServerResponse] =
-      client.updateAuthentication(auth) >> (request match
+      connInfo.updateAuthentication(auth) >> (request match
         case Tool.ListTools(_, _) => session match {
             case session: ToolProvider[F] => session.tools.map(_.map(tool =>
                 Tool(
@@ -290,7 +295,7 @@ private object McpServerBridge:
           McpError.raise(ErrorCode.InvalidRequest, "Unexpected initialize request during running phase").widen)
 
     override def handleNotification(notification: ClientNotification, auth: Authentication): F[Unit] =
-      client.updateAuthentication(auth) >> (notification match
+      connInfo.updateAuthentication(auth) >> (notification match
           case Roots.ListChanged(_meta) => session match
               case s: RootChangeAwareProvider[F] => s.rootsChanged
               case _                             => Async[F].unit
@@ -303,6 +308,7 @@ private object McpServerBridge:
     def apply[F[_]: Async](
       session: McpServer.Session[F],
       client: McpServerClientRepr[F],
+      connInfo: ConnectionInfoRepr[F],
       cleanup: F[Unit],
       comms: LowlevelMcpServer.Communication[F],
     ): F[PhaseRunning[F]] =
@@ -328,4 +334,4 @@ private object McpServerBridge:
           resourceChangesFibre.cancel,
           unsubscribeAll,
         ).parTupled.void
-      yield new PhaseRunning(session, client, cleanupAll, comms, activeSubscriptions)
+      yield new PhaseRunning(session, client, connInfo, cleanupAll, comms, activeSubscriptions)

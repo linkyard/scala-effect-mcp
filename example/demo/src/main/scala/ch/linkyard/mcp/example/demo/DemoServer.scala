@@ -15,13 +15,14 @@ import ch.linkyard.mcp.protocol.Resources.ReadResource
 import ch.linkyard.mcp.server.CallContext
 import ch.linkyard.mcp.server.McpError
 import ch.linkyard.mcp.server.McpServer
+import ch.linkyard.mcp.server.McpServer.ConnectionInfo
 import ch.linkyard.mcp.server.McpServer.Pageable
 import ch.linkyard.mcp.server.PromptFunction
 import ch.linkyard.mcp.server.ResourceTemplate
 import ch.linkyard.mcp.server.ToolFunction
 
 class DemoServer extends McpServer[IO]:
-  override def initialize(client: McpServer.Client[IO]): Resource[IO, McpServer.Session[IO]] =
+  override def initialize(client: McpServer.Client[IO], info: ConnectionInfo[IO]): Resource[IO, McpServer.Session[IO]] =
     Resource.pure(DemoSession(client))
 
   private class DemoSession(client: McpServer.Client[IO]) extends McpServer.Session[IO] with McpServer.ToolProvider[IO]

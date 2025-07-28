@@ -4,7 +4,9 @@ import cats.effect.IO
 import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.Notification
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnectionHandler
+import com.comcast.ip4s.Host
 import io.circe.syntax.*
 import org.http4s.*
 import org.http4s.circe.*
@@ -24,7 +26,7 @@ object McpServerRoute:
       case req @ POST -> `root` / "mcp" => req.attemptAs[JsonRpc.Message].value.flatMap {
           case Right(init @ JsonRpc.Request(_, "initialize", _)) =>
             Logger[IO].trace(s"Opening new session for ${init.asJson.noSpaces}") >>
-              openSession(init, handler, req.authentication)
+              openSession(init, handler, req)
           case Right(message) =>
             Logger[IO].trace(s"Received request ${message.asJson.noSpaces}") >>
               withSession(req)(conn => handleMessage(message, conn, req.authentication))
@@ -45,15 +47,25 @@ object McpServerRoute:
           case None => BadRequest("no session id provided")
     }
 
-  private def openSession(init: JsonRpc.Request, handler: JsonRpcConnectionHandler[IO], auth: Authentication)(using
+  private def openSession(init: JsonRpc.Request, handler: JsonRpcConnectionHandler[IO], req: Request[IO])(using
     store: SessionStore[IO]
   ): IO[Response[IO]] =
     for
-      conn <- StatefulConnection.create[IO]()
+      info: JsonRpcConnection.Info.Http = JsonRpcConnection.Info.Http(
+        server =
+          for
+            h <- req.serverHost
+            host <- Host.fromString(h.value)
+            port = req.serverPort.getOrElse(req.scheme.defaultPort)
+          yield (host -> port),
+        client = req.clientIp,
+        additional = Map.empty,
+      )
+      conn <- StatefulConnection.create[IO](info)
       (_, cleanup) <- handler.open(conn.connection).allocated
       _ <- store.open(conn, cleanup)
       _ <- Logger[IO].info(s"Opening new session ${conn.sessionId}")
-      _ <- conn.receivedFromClient(init.withAuth(auth))
+      _ <- conn.receivedFromClient(init.withAuth(req.authentication))
       response <- streamUntilResponse(init.id, conn)
     yield response
   end openSession

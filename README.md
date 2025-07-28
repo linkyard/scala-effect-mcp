@@ -34,15 +34,15 @@ import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.transport.StdioJsonRpcConnection
 import ch.linkyard.mcp.protocol.Initialize.PartyInfo
 import ch.linkyard.mcp.server.*
+import ch.linkyard.mcp.server.McpServer.Client
+import ch.linkyard.mcp.server.McpServer.ConnectionInfo
 import ch.linkyard.mcp.server.ToolFunction.Effect
 import com.melvinlow.json.schema.generic.auto.given
 import io.circe.generic.auto.given
 
 object SimpleEchoServer extends IOApp:
-  // Define the input/output types for your tool
   case class EchoInput(text: String)
 
-  // Create the echo tool function
   private def echoTool: ToolFunction[IO] = ToolFunction.text(
     ToolFunction.Info(
       "echo",
@@ -54,7 +54,6 @@ object SimpleEchoServer extends IOApp:
     (input: EchoInput, _) => IO(input.text),
   )
 
-  // Define your server session
   private class Session extends McpServer.Session[IO] with McpServer.ToolProvider[IO]:
     override val serverInfo: PartyInfo = PartyInfo(
       "Simple Echo MCP",
@@ -63,20 +62,18 @@ object SimpleEchoServer extends IOApp:
     override def instructions: IO[Option[String]] = None.pure
     override val tools: IO[List[ToolFunction[IO]]] = List(echoTool).pure
 
-  // Define your server
   private class Server extends McpServer[IO]:
-    override def connect(client: McpServer.Client[IO]): Resource[IO, McpServer.Session[IO]] =
-      Resource.pure(Session())
+    override def initialize(client: Client[IO], info: ConnectionInfo[IO]): Resource[IO, McpServer.Session[IO]] = ???
+    Resource.pure(Session())
 
   override def run(args: List[String]): IO[ExitCode] =
     // run with stdio transport
     Server().start(
-      StdioJsonRpcConnection.resource[IO],
+      StdioJsonRpcConnection.create[IO],
       e => IO(System.err.println(s"Error: $e")),
     ).useForever.as(ExitCode.Success)
   end run
 end SimpleEchoServer
-
 ```
 
 ### Running Your Server
@@ -175,7 +172,7 @@ A demonstration of authentication and authorization in MCP servers using Bearer 
 
 - **Set up the Authentication**: Uses OAuthAuthorizationServer to guard the `/mcp` path and provide the `.well-known/oauth-protected-resource`. Pass it a token validator function to e.g. check the signature of the provided JWP.
 - **Proxy Authorization Server** (optional): Since not all OIDC IdP provide the necessary `.well-known/oauth-authorization-server` endpoint this route provides a proxy. The result will be the `.well-known/openid-configuration` of the IdP.
-- **Access the Token**: In the open session the authentication token is available as `client.authentication`. This is refreshed on every request, so it will be kept current (provided the client makes a request from time to time, eg a Ping).
+- **Access the Token**: In the open session the authentication token is available as `connectionInfo.authentication`, the connectionInfo is passed in when a session is started (McpServer.initialize). This is refreshed on every request, so it will be kept current (provided the client makes a request from time to time, eg a Ping).
 
 This example is useful for understanding how to build secure MCP servers that require user authentication and implement proper authorization controls and have access to the token.
 

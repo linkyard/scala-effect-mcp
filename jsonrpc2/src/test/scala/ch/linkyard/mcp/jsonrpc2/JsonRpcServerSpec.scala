@@ -2,9 +2,9 @@ package ch.linkyard.mcp.jsonrpc2
 
 import cats.effect.IO
 import cats.effect.Ref
-import cats.effect.Resource
 import cats.effect.unsafe.implicits.global
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.*
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection.Info
 import fs2.Pipe
 import fs2.Stream
 import io.circe.JsonObject
@@ -20,6 +20,7 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers with EitherValues {
       outPipe: Pipe[IO, Message, Unit],
       outMessages: Ref[IO, List[Message]],
     ) extends JsonRpcConnection[IO] {
+      def info: Info = Info.Other(Map.empty)
       def in: Stream[IO, MessageEnvelope] = inStream
       def out: Pipe[IO, Message, Unit] = outPipe
     }
@@ -60,8 +61,7 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers with EitherValues {
         outMessages <- Ref[IO].of(List.empty[Message])
         connection = createMockConnection(List(request), outMessages)
         server = createMockServer(Map(request -> response))
-        connectionResource = Resource.pure[IO, JsonRpcConnection[IO]](connection)
-        _ <- JsonRpcServer.start(server, connectionResource).use(IO.pure)
+        _ <- JsonRpcServer.start(server, connection).use(IO.pure)
         finalMessages <- outMessages.get
       } yield finalMessages
       val messages = test.unsafeRunSync()
@@ -74,8 +74,7 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers with EitherValues {
         outMessages <- Ref[IO].of(List.empty[Message])
         connection = createMockConnection(Nil, outMessages)
         server = createMockServer(outMessages = List(serverOutMessage))
-        connectionResource = Resource.pure[IO, JsonRpcConnection[IO]](connection)
-        _ <- JsonRpcServer.start(server, connectionResource).use(IO.pure)
+        _ <- JsonRpcServer.start(server, connection).use(IO.pure)
         finalMessages <- outMessages.get
       } yield finalMessages
       val messages = test.unsafeRunSync()
@@ -93,8 +92,7 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers with EitherValues {
           handlerResponses = Map(request -> response),
           outMessages = List(serverOutMessage),
         )
-        connectionResource = Resource.pure[IO, JsonRpcConnection[IO]](connection)
-        _ <- JsonRpcServer.start(server, connectionResource).use(IO.pure)
+        _ <- JsonRpcServer.start(server, connection).use(IO.pure)
         finalMessages <- outMessages.get
       } yield finalMessages
       val messages = test.unsafeRunSync()

@@ -6,12 +6,14 @@ import cats.effect.std.Queue
 import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
+import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection.Info
 import io.circe.syntax.*
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 class StatefulConnection[F[_]: Async] private (
   val sessionId: SessionId,
+  httpInfo: Info.Http,
   inQueue: Queue[F, JsonRpc.MessageEnvelope],
   outGeneric: Queue[F, JsonRpc.Message],
   outRequestRelated: Ref[F, Map[JsonRpc.Id, Queue[F, Option[JsonRpc.Message]]]],
@@ -20,6 +22,7 @@ class StatefulConnection[F[_]: Async] private (
   private given Logger[F] = Slf4jLogger.getLogger[F].addContext(Map("sessionId" -> sessionId.asString))
 
   val connection: JsonRpcConnection[F] = new JsonRpcConnection[F]:
+    override val info: Info = httpInfo.copy(additional = Map("sessionId" -> sessionId.asString.asJson))
     override def out: fs2.Pipe[F, JsonRpc.Message, Unit] = _.evalMap(msg =>
       msg.relatesTo match
         case Some(callId) =>
@@ -81,11 +84,14 @@ class StatefulConnection[F[_]: Async] private (
       .evalTap(msg => Logger[F].debug(s"Sending non request related message: $msg"))
 
 object StatefulConnection:
-  def create[F[_]: Async](capacity: Int = 1000): F[StatefulConnection[F]] =
+  def create[F[_]: Async](
+    info: Info.Http,
+    capacity: Int = 1000,
+  ): F[StatefulConnection[F]] =
     for
       sessionId <- SessionId.generate
       inQueue <- Queue.bounded[F, JsonRpc.MessageEnvelope](capacity)
       outGeneric <- Queue.bounded[F, JsonRpc.Message](capacity)
       outRequestRelated <- Ref.of[F, Map[JsonRpc.Id, Queue[F, Option[JsonRpc.Message]]]](Map.empty)
-      connection = new StatefulConnection[F](sessionId, inQueue, outGeneric, outRequestRelated, capacity)
+      connection = new StatefulConnection[F](sessionId, info, inQueue, outGeneric, outRequestRelated, capacity)
     yield connection
