@@ -4,7 +4,7 @@
 # scala-effect-mcp
 Library to implement model context protocol servers (MCP) in scala using fs2 and cats effect.
 
-* Current version is 0.1.0
+* Current version is 0.3.2
 * Supported MCP protocol revision is 2025-06-18
 * Supported Transports: Stdio and Streamable HTTP
 
@@ -15,8 +15,8 @@ Library to implement model context protocol servers (MCP) in scala using fs2 and
 To use this library in your project, add the following dependencies to your `build.sbt`:
 
 ```scala
-libraryDependencies += "ch.linkyard.mcp" %% "mcp-server" % "0.1.0"
-libraryDependencies += "ch.linkyard.mcp" %% "jsonrpc2-stdio" % "0.1.0"
+libraryDependencies += "ch.linkyard.mcp" %% "mcp-server" % "0.3.2"
+libraryDependencies += "ch.linkyard.mcp" %% "jsonrpc2-stdio" % "0.3.2"
 ```
 
 ### Writing a Simple Echo Server
@@ -146,7 +146,7 @@ npx @modelcontextprotocol/inspector <command>
 
 2. **Launch the Inspector with your server:**
    ```bash
-   npx @modelcontextprotocol/inspector java -jar target/scala-3.3.0/your-server-assembly-0.1.0.jar
+   npx @modelcontextprotocol/inspector java -jar target/scala-3.7.1/your-server-assembly-0.1.0.jar
    ```
 
 3. **Verify connectivity and capabilities:**
