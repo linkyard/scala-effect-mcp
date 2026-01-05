@@ -33,7 +33,7 @@ object SimpleAuthenticatedServer extends IOApp:
       staticClient <- parseStaticClient(args.drop(1))
       _ <- IO.println(s"Using OIDC IdP $idp")
       _ <- staticClient match
-        case Some(ClientCredentials(id, _)) => IO.println(s"Using static client with ID: $id")
+        case Some(ClientCredentials(clientId = id)) => IO.println(s"Using static client with ID: $id")
         case None => IO.println("No static client configured")
       _ <- program(idp, staticClient).useForever
     yield ExitCode.Success
@@ -42,7 +42,7 @@ object SimpleAuthenticatedServer extends IOApp:
     (args.headOption, args.drop(1).headOption) match
       case (None, None) => None.pure[IO]
       case (Some(clientId), Some(clientSecret)) =>
-        Some(ClientCredentials(clientId, clientSecret)).pure[IO]
+        Some(ClientCredentials(clientId, clientSecret, _ => true)).pure[IO]
       case (Some(_), None) =>
         IO.raiseError(RuntimeException("Client ID provided but client secret is missing"))
       case (None, Some(_)) =>

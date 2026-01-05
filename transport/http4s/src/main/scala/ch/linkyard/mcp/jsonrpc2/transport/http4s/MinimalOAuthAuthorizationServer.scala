@@ -2,6 +2,7 @@ package ch.linkyard.mcp.jsonrpc2.transport.http4s
 
 import cats.effect.IO
 import cats.effect.kernel.Resource
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.MinimalOAuthAuthorizationServer.ClientCredentials
 import io.circe.Json
 import io.circe.syntax.*
 import org.http4s.*
@@ -9,7 +10,8 @@ import org.http4s.circe.*
 import org.http4s.client.Client
 import org.http4s.dsl.io.*
 import org.http4s.server.middleware.CORS
-import ch.linkyard.mcp.jsonrpc2.transport.http4s.MinimalOAuthAuthorizationServer.ClientCredentials
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 /** Minimal OAuth Authorization Server that takes auth and token URLs and issuer from external */
 class MinimalOAuthAuthorizationServer(
@@ -18,6 +20,8 @@ class MinimalOAuthAuthorizationServer(
   tokenEndpoint: Uri,
   pseudoDynamicClient: Option[ClientCredentials] = None,
 ):
+  private given Logger[IO] = Slf4jLogger.getLogger[IO]
+
   def route = wellKnownRoutes
   def rootUri: Uri = Uri(None, None, Root, Query.empty, None)
 
@@ -25,12 +29,29 @@ class MinimalOAuthAuthorizationServer(
   private val responseTypesSupported =
     List("code", "token", "id_token", "code id_token", "code token", "id_token token", "code id_token token")
 
-  private def registrationResponse(credentials: ClientCredentials): Json =
+  private def parseRegistrationRequest(req: Request[IO], credentials: ClientCredentials): IO[Either[String, String]] =
+    req.as[Json].map { json =>
+      val hc = json.hcursor
+      val requestedRedirectUris = hc.get[List[String]]("redirect_uris").toOption.getOrElse(Nil)
+
+      requestedRedirectUris.headOption match
+        case Some(redirectUri) =>
+          // Validate redirect URI against filter
+          if credentials.redirectUriFilter(redirectUri) then
+            Right(redirectUri)
+          else
+            Left("redirect_uri not allowed")
+        case None =>
+          Left("redirect_uris is required and must contain at least one URI")
+    }
+
+  private def registrationResponse(credentials: ClientCredentials, redirectUri: String): Json =
     Json.obj(
       "client_id" -> credentials.clientId.asJson,
       "client_secret" -> credentials.clientSecret.asJson,
       "client_id_issued_at" -> (System.currentTimeMillis() / 1000).asJson,
       "client_secret_expires_at" -> 0.asJson, // 0 means never expires
+      "redirect_uris" -> List(redirectUri).asJson,
     )
 
   private def wellKnownRoutes: HttpRoutes[IO] = CORS.policy.withAllowOriginAll(HttpRoutes.of {
@@ -51,10 +72,16 @@ class MinimalOAuthAuthorizationServer(
         case None => config
 
       Ok(finalConfig)
-    case POST -> Root / ".well-known" / "oauth-authorization-server" / "register" =>
+    case req @ POST -> Root / ".well-known" / "oauth-authorization-server" / "register" =>
       pseudoDynamicClient match
-        case Some(credentials) => Ok(registrationResponse(credentials))
-        case None              => NotFound()
+        case Some(credentials) =>
+          parseRegistrationRequest(req, credentials).flatMap {
+            case Right(redirectUri) =>
+              Logger[IO].info(s"New client registered: ${credentials.clientId} with redirect_uri: $redirectUri") >>
+                Ok(registrationResponse(credentials, redirectUri))
+            case Left(error) => BadRequest(error)
+          }
+        case None => NotFound()
   })
 
 object MinimalOAuthAuthorizationServer:
@@ -87,4 +114,8 @@ object MinimalOAuthAuthorizationServer:
       yield MinimalOAuthAuthorizationServer(issuer, authEndpoint, tokenEndpoint, pseudoDynamicClient)
     })
 
-  case class ClientCredentials(clientId: String, clientSecret: String)
+  case class ClientCredentials(
+    clientId: String,
+    clientSecret: String,
+    redirectUriFilter: String => Boolean
+  )
