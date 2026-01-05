@@ -143,7 +143,7 @@ object Initialize:
       }
 
       given Decoder[Changable] = Decoder.instance { c =>
-        c.downField("listChanged").as[Boolean].map(Changable.apply)
+        c.downField("listChanged").as[Option[Boolean]].map(_.getOrElse(false)).map(Changable.apply)
       }
 
     case class Subscribable(subscribe: Boolean, listChanged: Boolean)
