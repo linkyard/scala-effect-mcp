@@ -117,5 +117,5 @@ object MinimalOAuthAuthorizationServer:
   case class ClientCredentials(
     clientId: String,
     clientSecret: String,
-    redirectUriFilter: String => Boolean
+    redirectUriFilter: String => Boolean,
   )

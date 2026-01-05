@@ -34,7 +34,7 @@ object SimpleAuthenticatedServer extends IOApp:
       _ <- IO.println(s"Using OIDC IdP $idp")
       _ <- staticClient match
         case Some(ClientCredentials(clientId = id)) => IO.println(s"Using static client with ID: $id")
-        case None => IO.println("No static client configured")
+        case None                                   => IO.println("No static client configured")
       _ <- program(idp, staticClient).useForever
     yield ExitCode.Success
 
