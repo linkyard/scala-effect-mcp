@@ -6,7 +6,8 @@ import cats.effect.IOApp
 import cats.effect.kernel.Resource
 import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.McpServerRoute
-import ch.linkyard.mcp.jsonrpc2.transport.http4s.OAuthAuthorizationServer
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.MinimalOAuthAuthorizationServer
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.MinimalOAuthAuthorizationServer.ClientCredentials
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.OAuthMiddleware
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
 import ch.linkyard.mcp.server.*
@@ -29,17 +30,31 @@ object SimpleAuthenticatedServer extends IOApp:
       idpString <-
         args.headOption.toRight(RuntimeException("Missing IDP (e.g. https://id.acme.local/realm/example)")).liftTo[IO]
       idp <- Uri.fromString(idpString).liftTo[IO]
+      staticClient <- parseStaticClient(args.drop(1))
       _ <- IO.println(s"Using OIDC IdP $idp")
-      _ <- program(idp).useForever
+      _ <- staticClient match
+        case Some(ClientCredentials(clientId = id)) => IO.println(s"Using static client with ID: $id")
+        case None                                   => IO.println("No static client configured")
+      _ <- program(idp, staticClient).useForever
     yield ExitCode.Success
 
-  private def program(idp: Uri): Resource[IO, Unit] =
+  private def parseStaticClient(args: List[String]): IO[Option[ClientCredentials]] =
+    (args.headOption, args.drop(1).headOption) match
+      case (None, None) => None.pure[IO]
+      case (Some(clientId), Some(clientSecret)) =>
+        Some(ClientCredentials(clientId, clientSecret, _ => true)).pure[IO]
+      case (Some(_), None) =>
+        IO.raiseError(RuntimeException("Client ID provided but client secret is missing"))
+      case (None, Some(_)) =>
+        IO.raiseError(RuntimeException("Client secret provided but client ID is missing"))
+
+  private def program(idp: Uri, staticClient: Option[ClientCredentials]): Resource[IO, Unit] =
     for
       given SessionStore[IO] <- SessionStore.inMemory[IO](30.minutes)
       handler = TheServer().jsonRpcConnectionHandler(logError)
       given Client[IO] <- EmberClientBuilder.default[IO].build
       root = Uri.Path.Root / "_api"
-      authServer <- OAuthAuthorizationServer.fromOidcServer(idp)
+      authServer <- MinimalOAuthAuthorizationServer.fromOidcConfig(idp, staticClient)
       middleware =
         OAuthMiddleware(
           name = "simple-authenticated-server",
