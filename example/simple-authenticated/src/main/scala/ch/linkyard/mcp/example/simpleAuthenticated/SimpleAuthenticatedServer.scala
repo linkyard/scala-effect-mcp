@@ -40,7 +40,7 @@ object SimpleAuthenticatedServer extends IOApp:
 
   private def parseStaticClient(args: List[String]): IO[Option[ClientCredentials]] =
     (args.headOption, args.drop(1).headOption) match
-      case (None, None) => None.pure[IO]
+      case (None, None)                         => None.pure[IO]
       case (Some(clientId), Some(clientSecret)) =>
         Some(ClientCredentials(clientId, clientSecret, _ => true)).pure[IO]
       case (Some(_), None) =>

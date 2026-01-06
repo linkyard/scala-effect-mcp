@@ -111,7 +111,7 @@ private object McpServerBridge:
             )
           yield response
         case Ping(_) => Ping.Response().pure
-        case other => McpError.raise(
+        case other   => McpError.raise(
             ErrorCode.MethodNotFound,
             "Unexpected request during initialization phase: " + other.method.key,
           ).widen
@@ -138,7 +138,7 @@ private object McpServerBridge:
             instructions = instructions,
           )
         case _: Ping => Ping.Response().pure
-        case other => McpError.raise(
+        case other   => McpError.raise(
             ErrorCode.InvalidRequest,
             "Unexpected request during initialization phase: " + other.method.key,
           ).widen)
@@ -290,7 +290,7 @@ private object McpServerBridge:
           completion.map(Completion.Complete.Response(_))
         case Logging.SetLevel(level, _) =>
           client.setLogLevel(level).as(Logging.SetLevel.Response())
-        case Ping(_) => Ping.Response().pure
+        case Ping(_)       => Ping.Response().pure
         case _: Initialize =>
           McpError.raise(ErrorCode.InvalidRequest, "Unexpected initialize request during running phase").widen)
 
