@@ -39,7 +39,7 @@ object StoryPrompt extends PromptFunction[IO]:
     otherArguments: Map[String, String],
     context: CallContext[IO],
   ): IO[Completion] = argumentName match
-    case "name" => Completion(values = Nil).pure
+    case "name"  => Completion(values = Nil).pure
     case "color" =>
       val matching =
         if valueToComplete.isEmpty then colors
