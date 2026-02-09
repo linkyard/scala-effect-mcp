@@ -11,100 +11,18 @@ Library to implement model context protocol servers (MCP) in Scala using fs2 and
 
 ---
 
-**[Getting Started](#getting-started)** | **[Key Concepts](#key-concepts)** | **[Architecture](ARCHITECTURE.md)** | **[Examples](#examples)** | **[Testing](#testing-your-mcp-server)** | **[Modules](#project-modules)**
+**[Getting Started](GETTING-STARTED.md)** | **[Key Concepts](#key-concepts)** | **[Architecture](ARCHITECTURE.md)** | **[Examples](#examples)** | **[Testing](#testing-your-mcp-server)** | **[Modules](#project-modules)**
 
 ---
 
 ## Getting Started
 
-### Adding Dependencies
-
-Add the following to your `build.sbt`:
-
-```scala
-libraryDependencies += "ch.linkyard.mcp" %% "mcp-server" % "0.3.3"
-libraryDependencies += "ch.linkyard.mcp" %% "jsonrpc2-stdio" % "0.3.3"
-```
-
-### Writing a Simple Echo Server
-
-Here's a minimal MCP server with a single echo tool (see [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)):
-
-```scala
-package ch.linkyard.mcp.example.simpleEcho
-
-import cats.effect.ExitCode
-import cats.effect.IO
-import cats.effect.IOApp
-import cats.effect.kernel.Resource
-import cats.implicits.*
-import ch.linkyard.mcp.jsonrpc2.transport.StdioJsonRpcConnection
-import ch.linkyard.mcp.protocol.Initialize.PartyInfo
-import ch.linkyard.mcp.server.*
-import ch.linkyard.mcp.server.McpServer.Client
-import ch.linkyard.mcp.server.McpServer.ConnectionInfo
-import ch.linkyard.mcp.server.ToolFunction.Effect
-import com.melvinlow.json.schema.generic.auto.given
-import io.circe.generic.auto.given
-
-object SimpleEchoServer extends IOApp:
-  case class EchoInput(text: String)
-
-  private def echoTool: ToolFunction[IO] = ToolFunction.text(
-    ToolFunction.Info(
-      "echo",
-      Some("Echo"),
-      Some("Repeats the input text back to you"),
-      Effect.ReadOnly,
-      isOpenWorld = false,
-    ),
-    (input: EchoInput, _) => IO(input.text),
-  )
-
-  private class Session extends McpServer.Session[IO] with McpServer.ToolProvider[IO]:
-    override val serverInfo: PartyInfo = PartyInfo(
-      "Simple Echo MCP",
-      "1.0.0",
-    )
-    override def instructions: IO[Option[String]] = None.pure
-    override val tools: IO[List[ToolFunction[IO]]] = List(echoTool).pure
-
-  private class Server extends McpServer[IO]:
-    override def initialize(client: Client[IO], info: ConnectionInfo[IO]): Resource[IO, McpServer.Session[IO]] = ???
-    Resource.pure(Session())
-
-  override def run(args: List[String]): IO[ExitCode] =
-    // run with stdio transport
-    Server().start(
-      StdioJsonRpcConnection.create[IO],
-      e => IO(System.err.println(s"Error: $e")),
-    ).useForever.as(ExitCode.Success)
-  end run
-end SimpleEchoServer
-```
-
-### Running Your Server
-
-1. **Compile your server:**
-   ```bash
-   sbt assembly
-   ```
-
-2. **Configure your MCP client** (e.g., Claude Desktop) to use your server:
-   ```json
-   {
-     "mcpServers": {
-       "my-echo-server": {
-         "command": "java",
-         "args": ["-jar", "/path/to/your-server-assembly-1.0.0.jar"]
-       }
-     }
-   }
-   ```
+See the **[Getting Started guide](GETTING-STARTED.md)** for a step-by-step walkthrough of building your first MCP server.
 
 ## Key Concepts
 
 The Model Context Protocol (MCP) defines several core concepts that enable AI assistants to interact with external systems and data sources. Have your `Session` implement the listed traits to expose capabilities.
+For a deeper look at the library's types, layers, and internal wiring, see the **[Architecture documentation](ARCHITECTURE.md)**.
 
 | Concept | Description | Required Trait(s) |
 |---------|-------------|-------------------|
@@ -133,7 +51,6 @@ For a detailed introduction to all MCP concepts, see [modelcontextprotocol.io/in
 * **Json Schema**
   * Json Schemas are automatically derived using [scala-json-schema](https://github.com/lowmelvin/scala-json-schema). You may use the `@JsonSchemaField` annotation to add additional attributes to the schema, for example `@JsonSchemaField("description", "my nice field".asJson)`.
 
-For a deeper look at the library's types, layers, and internal wiring, see the **[Architecture documentation](ARCHITECTURE.md)**.
 
 ## Testing Your MCP Server
 
@@ -162,63 +79,14 @@ npx @modelcontextprotocol/inspector <command>
 
 ## Examples
 
-### [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)
+| Example | Description |
+|---------|-------------|
+| **[Simple Echo](example/simple-echo/)** | Minimal server with a single echo tool. Best starting point. |
+| **[Simple Authenticated](example/simple-authenticated/)** | OAuth/Bearer token authentication over streamable HTTP. |
+| **[Demo (Stdio)](example/demo/)** | Comprehensive demo of tools, prompts, resources, elicitation, sampling, and progress reporting. |
+| **[Demo (HTTP)](example/demo-http/)** | Same as the stdio demo, but over streamable HTTP. |
 
-A minimal example that shows the basic structure of an MCP server with a single tool:
-
-- **Single Tool**: Implements a simple echo tool that repeats input text
-- **Basic Structure**: Demonstrates the essential components: `McpServer`, `Session`, and `ToolProvider`
-- **Getting Started**: Perfect for understanding the fundamentals of MCP server implementation
-
-### [SimpleAuthenticatedServer](example/simple-authenticated/src/main/scala/ch/linkyard/mcp/example/simpleAuthenticated/SimpleAuthenticatedServer.scala)
-
-A demonstration of authentication and authorization in MCP servers using Bearer tokens and the flow described in <https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization>:
-
-- **Set up the Authentication**: Uses OAuthAuthorizationServer to guard the `/mcp` path and provide the `.well-known/oauth-protected-resource`. Pass it a token validator function to e.g. check the signature of the provided JWP.
-- **Proxy Authorization Server** (optional): Since not all OIDC IdP provide the necessary `.well-known/oauth-authorization-server` endpoint this route provides a proxy. The result will be the `.well-known/openid-configuration` of the IdP.
-- **Static Client Registration** (optional): If both client ID and client secret are provided as command-line arguments, the server will expose a static client registration endpoint at `.well-known/oauth-authorization-server/register` and patch the authorization server metadata to include the `registration_endpoint` field.
-- **Access the Token**: In the open session the authentication token is available as `connectionInfo.authentication`, the connectionInfo is passed in when a session is started (McpServer.initialize). This is refreshed on every request, so it will be kept current (provided the client makes a request from time to time, eg a Ping).
-
-**Usage:**
-```bash
-# Without static client registration
-java -jar simple-authenticated-assembly.jar <idp-uri>
-
-# With static client registration
-java -jar simple-authenticated-assembly.jar <idp-uri> <client-id> <client-secret>
-```
-
-**Command-line Arguments:**
-- `<idp-uri>` (required): The OIDC Identity Provider URI (e.g., `https://id.acme.local/realm/example`)
-- `<client-id>` (optional): OAuth client ID for static client registration. If provided, `<client-secret>` must also be provided.
-- `<client-secret>` (optional): OAuth client secret for static client registration. If provided, `<client-id>` must also be provided.
-
-This example is useful for understanding how to build secure MCP servers that require user authentication and implement proper authorization controls and have access to the token.
-
-### [DemoMcpServer with Stdio](example/demo/src/main/scala/ch/linkyard/mcp/example/demo/StdioDemoMcpServer.scala)
-
-A more complex example that demonstrates all major MCP concepts:
-
-- **Multiple Tools**:
-  - `parrot`: Simple text echo with modification
-  - `adder`: Mathematical operation with progress reporting and logging
-  - `userEmail`: Complex tool using elicitation and sampling to find user emails
-- **Prompts**: Story generation prompt with argument completion
-- **Resources**: Animal database with 20 animals, resource templates, and autocomplete
-- **Advanced Features**: Progress reporting, logging, elicitation, sampling, and completion
-
-This example showcases:
-- How to implement complex workflows using multiple MCP concepts
-- Integration between different features (tools calling elicitation and sampling)
-- Resource management with pagination and templates
-- Error handling and user interaction patterns
-- Stdio connection
-
-Both examples can be built and tested using the MCP Inspector as described in the Testing section above.
-
-### [DemoMcpServer with Http](example/demo-http/src/main/scala/ch/linkyard/mcp/example/demo/HttpDemoMcpServer.scala)
-
-Same as DemoMcpServer, but via streaming HTTP instead of stdio. The server is available under <http://127.0.0.1:18283/mcp>.
+All examples can be built and tested using the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) as described in the [Testing](#testing-your-mcp-server) section.
 
 ## Project Modules
 
