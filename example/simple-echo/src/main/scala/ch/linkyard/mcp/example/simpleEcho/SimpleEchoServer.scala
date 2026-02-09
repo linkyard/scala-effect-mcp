@@ -37,8 +37,8 @@ object SimpleEchoServer extends IOApp:
     override val tools: IO[List[ToolFunction[IO]]] = List(echoTool).pure
 
   private class Server extends McpServer[IO]:
-    override def initialize(client: Client[IO], info: ConnectionInfo[IO]): Resource[IO, McpServer.Session[IO]] = ???
-    Resource.pure(Session())
+    override def initialize(client: Client[IO], info: ConnectionInfo[IO]): Resource[IO, McpServer.Session[IO]] =
+      Resource.pure(Session())
 
   override def run(args: List[String]): IO[ExitCode] =
     // run with stdio transport

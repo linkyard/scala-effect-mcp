@@ -170,7 +170,6 @@ stateDiagram-v2
     PhaseInitial --> PhaseInitializing : Initialize request received
     PhaseInitializing --> PhaseRunning : Initialized notification received
     PhaseRunning --> [*] : Connection closed
-    PhaseRunning --> PhaseInitializing : Re-initialize request
 ```
 
 - **PhaseInitial** -- waiting for the `Initialize` request; only `Ping` is accepted

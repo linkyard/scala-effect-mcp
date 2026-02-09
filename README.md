@@ -69,7 +69,7 @@ npx @modelcontextprotocol/inspector <command>
 
 2. **Launch the Inspector with your server:**
    ```bash
-   npx @modelcontextprotocol/inspector java -jar target/scala-3.7.1/your-server-assembly-0.1.0.jar
+   npx @modelcontextprotocol/inspector java -jar target/scala-3.8.1/your-server-assembly-0.1.0.jar
    ```
 
 3. **Verify connectivity and capabilities:**
@@ -95,7 +95,7 @@ This project is organized as a multi-module Scala build:
 | Module | Artifact | Description |
 |--------|----------|-------------|
 | **jsonrpc2** | `ch.linkyard.mcp:jsonrpc2` | Minimal JSON-RPC 2.0 protocol implementation -- message types and basic server logic. Foundation for all communication. |
-| **transport/stdio** | `ch.linkyard.mcp:transport-stdio` | Transport layer for JSON-RPC 2.0 over standard input/output (stdio). Depends on `jsonrpc2`. |
+| **transport/stdio** | `ch.linkyard.mcp:jsonrpc2-stdio` | Transport layer for JSON-RPC 2.0 over standard input/output (stdio). Depends on `jsonrpc2`. |
 | **transport/http4s** | `ch.linkyard.mcp:mcp-server-http4s` | Transport layer for JSON-RPC 2.0 over streamable HTTP using http4s. Includes session management and OAuth support. Depends on `jsonrpc2`. |
 | **mcp/protocol** | `ch.linkyard.mcp:mcp-protocol` | MCP message types, codecs, and protocol-specific logic. Depends on `jsonrpc2`. |
 | **mcp/server** | `ch.linkyard.mcp:mcp-server` | Core server logic for handling MCP requests and notifications. Provides `McpServer`, `Session`, and all capability traits. Depends on `jsonrpc2` and `mcp/protocol`. |
