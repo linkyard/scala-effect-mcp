@@ -2,17 +2,24 @@
 [![Scala Steward badge](https://img.shields.io/badge/Scala_Steward-helping-blue.svg?style=flat&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAMAAAARSr4IAAAAVFBMVEUAAACHjojlOy5NWlrKzcYRKjGFjIbp293YycuLa3pYY2LSqql4f3pCUFTgSjNodYRmcXUsPD/NTTbjRS+2jomhgnzNc223cGvZS0HaSD0XLjbaSjElhIr+AAAAAXRSTlMAQObYZgAAAHlJREFUCNdNyosOwyAIhWHAQS1Vt7a77/3fcxxdmv0xwmckutAR1nkm4ggbyEcg/wWmlGLDAA3oL50xi6fk5ffZ3E2E3QfZDCcCN2YtbEWZt+Drc6u6rlqv7Uk0LdKqqr5rk2UCRXOk0vmQKGfc94nOJyQjouF9H/wCc9gECEYfONoAAAAASUVORK5CYII=)](https://scala-steward.org)
 
 # scala-effect-mcp
-Library to implement model context protocol servers (MCP) in scala using fs2 and cats effect.
+
+Library to implement model context protocol servers (MCP) in Scala using fs2 and cats effect.
 
 * Current version is 0.3.3
 * Supported MCP protocol revision is 2025-06-18
 * Supported Transports: Stdio and Streamable HTTP
 
+---
+
+**[Getting Started](#getting-started)** | **[Key Concepts](#key-concepts)** | **[Architecture](ARCHITECTURE.md)** | **[Examples](#examples)** | **[Testing](#testing-your-mcp-server)** | **[Modules](#project-modules)**
+
+---
+
 ## Getting Started
 
 ### Adding Dependencies
 
-To use this library in your project, add the following dependencies to your `build.sbt`:
+Add the following to your `build.sbt`:
 
 ```scala
 libraryDependencies += "ch.linkyard.mcp" %% "mcp-server" % "0.3.3"
@@ -21,7 +28,7 @@ libraryDependencies += "ch.linkyard.mcp" %% "jsonrpc2-stdio" % "0.3.3"
 
 ### Writing a Simple Echo Server
 
-Here's a minimal example of an MCP server that provides a simple echo tool (see [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)):
+Here's a minimal MCP server with a single echo tool (see [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)):
 
 ```scala
 package ch.linkyard.mcp.example.simpleEcho
@@ -83,7 +90,7 @@ end SimpleEchoServer
    sbt assembly
    ```
 
-3. **Configure your MCP client** (e.g., Claude Desktop) to use your server:
+2. **Configure your MCP client** (e.g., Claude Desktop) to use your server:
    ```json
    {
      "mcpServers": {
@@ -97,47 +104,46 @@ end SimpleEchoServer
 
 ## Key Concepts
 
-The Model Context Protocol (MCP) defines several core concepts that enable AI assistants to interact with external systems and data sources. Here's an overview of the main concepts supported by this library, to use them have your McpServer implement the listed traits.
+The Model Context Protocol (MCP) defines several core concepts that enable AI assistants to interact with external systems and data sources. Have your `Session` implement the listed traits to expose capabilities.
 
-| Concept | Description | Supported by scala-effect-mcp | Required Trait(s) |
-|---------|-------------|-----------------------------|-------------------|
-| **Tools** | Functions that AI assistants can call to perform actions or retrieve information. Tools have defined input/output schemas and can be read-only, additive, or destructive. | ✅ | `ToolProvider[F]` |
-| **Resources** | Data objects that can be read, listed, and subscribed to for real-time updates. Resources represent external data sources like files, databases, or APIs. | ✅ | `ResourceProvider[F]`, `ResourceProviderWithChanges[F]`, `ResourceSubscriptionProvider[F]` |
-| **Prompts** | Predefined conversation templates that can be parameterized and used to generate consistent AI responses. Prompts help standardize interactions. | ✅ | `PromptProvider[F]`, `PromptProviderWithChanges[F]` |
-| **Elicitation** | A mechanism for servers to request additional information from users during tool execution. This enables interactive workflows where the AI can ask clarifying questions. | ✅ | Available via `Client[F].elicit()` |
-| **Sampling** | Allows servers to request AI model completions from the client, enabling servers to generate content or make decisions using the client's AI capabilities. | ✅ | Available via `Client[F].sample()` |
-| **Roots** | Entry points that define the starting locations for resource hierarchies. Roots help organize and navigate complex data structures. | ✅ | `RootChangeAwareProvider[F]` |
-| **Logging** | Built-in logging capabilities for servers to send diagnostic and informational messages to clients for debugging and monitoring. | ✅ | Available via `Client[F].log()` |
-| **Completion** | Autocomplete functionality for prompt arguments and resource URIs, helping users and AI assistants discover available options. | ✅ | Built into `PromptProvider[F]` and `ResourceProvider[F]` |
+| Concept | Description | Required Trait(s) |
+|---------|-------------|-------------------|
+| **Tools** | Functions that AI assistants can call to perform actions or retrieve information. Tools have defined input/output schemas and can be read-only, additive, or destructive. | `ToolProvider[F]` |
+| **Resources** | Data objects that can be read, listed, and subscribed to for real-time updates. Resources represent external data sources like files, databases, or APIs. | `ResourceProvider[F]`, `ResourceProviderWithChanges[F]`, `ResourceSubscriptionProvider[F]` |
+| **Prompts** | Predefined conversation templates that can be parameterized and used to generate consistent AI responses. Prompts help standardize interactions. | `PromptProvider[F]`, `PromptProviderWithChanges[F]` |
+| **Elicitation** | A mechanism for servers to request additional information from users during tool execution. This enables interactive workflows where the AI can ask clarifying questions. | Available via `Client[F].elicit()` |
+| **Sampling** | Allows servers to request AI model completions from the client, enabling servers to generate content or make decisions using the client's AI capabilities. | Available via `Client[F].sample()` |
+| **Roots** | Entry points that define the starting locations for resource hierarchies. Roots help organize and navigate complex data structures. | `RootChangeAwareProvider[F]` |
+| **Logging** | Built-in logging capabilities for servers to send diagnostic and informational messages to clients for debugging and monitoring. | Available via `Client[F].log()` |
+| **Completion** | Autocomplete functionality for prompt arguments and resource URIs, helping users and AI assistants discover available options. | Built into `PromptProvider[F]` and `ResourceProvider[F]` |
 
-For a detailed introduction to all MCP concepts, see [https://modelcontextprotocol.io/introduction](https://modelcontextprotocol.io/introduction).
+For a detailed introduction to all MCP concepts, see [modelcontextprotocol.io/introduction](https://modelcontextprotocol.io/introduction).
 
-Additional Considerations:
-* Cancellation
+### Additional Considerations
+
+* **Cancellation**
   * Request cancellation is supported by cancelling the IO for pending request (eg client.sample)
-  * When the client requests cancellation the the server will automatically cancel the IO for the request handling (eg the tool function)
-* Logging
+  * When the client requests cancellation the server will automatically cancel the IO for the request handling (eg the tool function)
+* **Logging**
   * Prefer logging via the call context as this will automatically add the logger name
-  * Logging level is automatically applied, only client.log calls that meet the logging level set by the client will be passed on to the your code
-* Progress:
+  * Logging level is automatically applied, only client.log calls that meet the logging level set by the client will be passed on to your code
+* **Progress**
   * Progress can be reported to the client using the call context
-  * Progress logs by the client are not passed on to the your code
-* Json Schema
-  * Json Schemas are automatically derived using [https://github.com/lowmelvin/scala-json-schema](scala-json-schema). You may use the @JsonSchemaField annotation to add additional attributes to the schema, for example `@JsonSchemaField("description", "my nice field".asJson).
+  * Progress logs by the client are not passed on to your code
+* **Json Schema**
+  * Json Schemas are automatically derived using [scala-json-schema](https://github.com/lowmelvin/scala-json-schema). You may use the `@JsonSchemaField` annotation to add additional attributes to the schema, for example `@JsonSchemaField("description", "my nice field".asJson)`.
+
+For a deeper look at the library's types, layers, and internal wiring, see the **[Architecture documentation](ARCHITECTURE.md)**.
 
 ## Testing Your MCP Server
 
-The [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) is an interactive developer tool for testing and debugging MCP servers. It provides a comprehensive interface to test all aspects of your server implementation.
-
-### Installation and Usage
+The [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) is an interactive developer tool for testing and debugging MCP servers.
 
 The Inspector runs directly through `npx` without requiring installation:
 
 ```bash
 npx @modelcontextprotocol/inspector <command>
 ```
-
-### Testing Your Server
 
 1. **Build your server:**
    ```bash
@@ -155,8 +161,6 @@ npx @modelcontextprotocol/inspector <command>
    - Review the server information and instructions
 
 ## Examples
-
-This library provides two example servers that demonstrate different aspects of MCP functionality:
 
 ### [SimpleEchoServer](example/simple-echo/src/main/scala/ch/linkyard/mcp/example/simpleEcho/SimpleEchoServer.scala)
 
@@ -191,7 +195,6 @@ java -jar simple-authenticated-assembly.jar <idp-uri> <client-id> <client-secret
 
 This example is useful for understanding how to build secure MCP servers that require user authentication and implement proper authorization controls and have access to the token.
 
-
 ### [DemoMcpServer with Stdio](example/demo/src/main/scala/ch/linkyard/mcp/example/demo/StdioDemoMcpServer.scala)
 
 A more complex example that demonstrates all major MCP concepts:
@@ -217,21 +220,16 @@ Both examples can be built and tested using the MCP Inspector as described in th
 
 Same as DemoMcpServer, but via streaming HTTP instead of stdio. The server is available under <http://127.0.0.1:18283/mcp>.
 
-
 ## Project Modules
 
-This project is organized as a multi-module Scala build. The main modules are:
+This project is organized as a multi-module Scala build:
 
-- **jsonrpc2** (`ch.linkyard.mcp:jsonrpc2`)
-  Provides a minimal JSON-RPC 2.0 protocol implementation, including message types and basic server logic. It is the foundation for communication between clients and servers.
+| Module | Artifact | Description |
+|--------|----------|-------------|
+| **jsonrpc2** | `ch.linkyard.mcp:jsonrpc2` | Minimal JSON-RPC 2.0 protocol implementation -- message types and basic server logic. Foundation for all communication. |
+| **transport/stdio** | `ch.linkyard.mcp:transport-stdio` | Transport layer for JSON-RPC 2.0 over standard input/output (stdio). Depends on `jsonrpc2`. |
+| **transport/http4s** | `ch.linkyard.mcp:mcp-server-http4s` | Transport layer for JSON-RPC 2.0 over streamable HTTP using http4s. Includes session management and OAuth support. Depends on `jsonrpc2`. |
+| **mcp/protocol** | `ch.linkyard.mcp:mcp-protocol` | MCP message types, codecs, and protocol-specific logic. Depends on `jsonrpc2`. |
+| **mcp/server** | `ch.linkyard.mcp:mcp-server` | Core server logic for handling MCP requests and notifications. Provides `McpServer`, `Session`, and all capability traits. Depends on `jsonrpc2` and `mcp/protocol`. |
 
-- **transport/stdio** (`ch.linkyard.mcp:transport-stdio`)
-  Implements a transport layer for JSON-RPC 2.0 over standard input/output (stdio), enabling communication via process pipes or terminals. Depends on the `jsonrpc2` module.
-
-- **mcp/protocol** (`ch.linkyard.mcp:mcp-protocol`)
-  Defines the Model Context Protocol (MCP) message types, codecs, and protocol-specific logic. This module specifies the structure and semantics of MCP requests, responses, and notifications. Depends on `jsonrpc2`.
-
-- **mcp/server** (`ch.linkyard.mcp:mcp-server`)
-  Implements the core server logic for handling MCP requests and notifications. It provides abstractions for request/response handling, error management, and progress reporting. Depends on both `jsonrpc2` and `mcp/protocol`.
-
-Each module is defined as an SBT subproject and can be built, tested, and published independently. The modular structure allows for flexible reuse and extension of protocol, transport, and server logic.
+Each module is defined as an SBT subproject and can be built, tested, and published independently.
