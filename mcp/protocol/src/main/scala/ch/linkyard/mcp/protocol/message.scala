@@ -12,13 +12,19 @@ type ClientResponse =
   Ping.Response | Elicitation.Create.Response | Roots.ListRoots.Response | Sampling.CreateMessage.Response
 
 type ClientRequest =
-  Ping | Initialize | Prompts.ListPrompts | Prompts.GetPrompt | Resources.ListResources | Resources.ListResourceTemplates | Resources.ReadResource | Resources.Subscribe | Resources.Unsubscribe | Tool.ListTools | Tool.CallTool | Logging.SetLevel | Completion.Complete
+  Ping | Initialize | Prompts.ListPrompts | Prompts.GetPrompt | Resources.ListResources |
+    Resources.ListResourceTemplates | Resources.ReadResource | Resources.Subscribe | Resources.Unsubscribe |
+    Tool.ListTools | Tool.CallTool | Logging.SetLevel | Completion.Complete
 type ServerResponse =
-  Ping.Response | Initialize.Response | Prompts.ListPrompts.Response | Prompts.ListPrompts.Response | Prompts.GetPrompt.Response | Resources.ListResources.Response | Resources.ListResourceTemplates.Response | Resources.ReadResource.Response | Resources.Subscribe.Response | Resources.Unsubscribe.Response | Tool.ListTools.Response | Tool.CallTool.Response | Logging.SetLevel.Response | Completion.Complete.Response
+  Ping.Response | Initialize.Response | Prompts.ListPrompts.Response | Prompts.ListPrompts.Response |
+    Prompts.GetPrompt.Response | Resources.ListResources.Response | Resources.ListResourceTemplates.Response |
+    Resources.ReadResource.Response | Resources.Subscribe.Response | Resources.Unsubscribe.Response |
+    Tool.ListTools.Response | Tool.CallTool.Response | Logging.SetLevel.Response | Completion.Complete.Response
 
 type ClientNotification = Initialized | Roots.ListChanged | Cancelled | ProgressNotification
 type ServerNotification =
-  Cancelled | ProgressNotification | Prompts.ListChanged | Resources.Updated | Resources.ListChanged | Tool.ListChanged | Logging.LoggingMessage
+  Cancelled | ProgressNotification | Prompts.ListChanged | Resources.Updated | Resources.ListChanged |
+    Tool.ListChanged | Logging.LoggingMessage
 
 // we define them as enums for exhaustiveness checking
 enum RequestMethod(val key: String):
