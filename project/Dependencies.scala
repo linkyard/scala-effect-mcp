@@ -16,7 +16,7 @@ object Dependencies {
   val scalacheck = "1.19.0"
   val scalatestScalacheck = "3.2.14.0"
   val scalacheckShapeless = "1.3.1"
-  val catsEffectTesting = "1.7.0"
+  val catsEffectTesting = "1.8.0"
 
   val scalaLogging = "3.9.5"
   val logBinding: Seq[ModuleID] = Seq(
