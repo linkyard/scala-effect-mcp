@@ -12,7 +12,7 @@ object Dependencies {
   val http4s = "0.23.33"
   val ip4s = "3.7.0"
 
-  val scalatest = "3.2.19"
+  val scalatest = "3.2.20"
   val scalacheck = "1.19.0"
   val scalatestScalacheck = "3.2.14.0"
   val scalacheckShapeless = "1.3.1"
