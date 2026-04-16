@@ -36,6 +36,12 @@ class StatefulConnection[F[_]: Async] private (
     )
     override def in: fs2.Stream[F, JsonRpc.MessageEnvelope] = fs2.Stream.fromQueueUnterminated(inQueue)
 
+  def describe: String = (httpInfo.client, httpInfo.server) match
+    case (Some(clientIp), Some(host, port)) => s"$clientIp to $host"
+    case (Some(clientIp), None)             => s"$clientIp"
+    case (None, Some(host, port))           => s"$host"
+    case _                                  => "local"
+
   private def outQueue(id: JsonRpc.Id): F[Queue[F, Option[JsonRpc.Message]]] =
     outRequestRelated.get.map(_.get(id)).flatMap {
       case Some(q) => q.pure[F]
