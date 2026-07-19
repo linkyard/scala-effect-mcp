@@ -156,10 +156,11 @@ object McpServer:
     def description: Option[String]
     def required: Boolean
     private[McpServer] def toJsonSchema: Json = Json.obj(
-      "type" -> (this match
-        case _: Text   => "string".asJson
-        case _: YesNo  => "boolean".asJson
-        case _: Number => "number".asJson),
+      "type" ->
+        (this match
+          case _: Text   => "string".asJson
+          case _: YesNo  => "boolean".asJson
+          case _: Number => "number".asJson),
       "title" -> title.getOrElse(name).asJson,
       "description" -> description.asJson,
       "required" -> required.asJson,
