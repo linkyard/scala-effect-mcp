@@ -14,7 +14,7 @@ object Dependencies {
 
   val scalatest = "3.2.20"
   val scalacheck = "1.19.0"
-  val scalatestScalacheck = "3.2.14.0"
+  val scalatestScalacheck = "3.2.18.0"
   val scalacheckShapeless = "1.3.1"
   val catsEffectTesting = "1.8.0"
 
