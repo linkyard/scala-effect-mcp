@@ -48,7 +48,7 @@ lazy val root = (project in file("."))
         "org.typelevel" %% "cats-effect-testing-scalatest" % Dependencies.catsEffectTesting,
         "org.scalatest" %% "scalatest" % Dependencies.scalatest,
         "org.scalacheck" %% "scalacheck" % Dependencies.scalacheck,
-        "org.scalatestplus" %% "scalacheck-1-16" % Dependencies.scalatestScalacheck ,
+        "org.scalatestplus" %% "scalacheck-1-17" % Dependencies.scalatestScalacheck ,
       ).map(_ % Test),
       publish := {},
     )),
