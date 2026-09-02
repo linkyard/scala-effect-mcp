@@ -9,7 +9,7 @@ object Dependencies {
   val fs2 = "3.13.0"
   val circe = "0.14.15"
   val scalaJsonSchema = "0.2.0"
-  val http4s = "0.23.34"
+  val http4s = "0.23.36"
   val ip4s = "3.8.0"
 
   val scalatest = "3.2.20"
