@@ -20,9 +20,9 @@ object Dependencies {
 
   val scalaLogging = "3.9.5"
   val logBinding: Seq[ModuleID] = Seq(
-    "org.slf4j" % "jul-to-slf4j" % "2.0.17",
-    "org.slf4j" % "jcl-over-slf4j" % "2.0.17",
-    "org.slf4j" % "log4j-over-slf4j" % "2.0.17",
+    "org.slf4j" % "jul-to-slf4j" % "2.0.19",
+    "org.slf4j" % "jcl-over-slf4j" % "2.0.19",
+    "org.slf4j" % "log4j-over-slf4j" % "2.0.19",
     "ch.qos.logback" % "logback-classic" % "1.5.32",
   )
 }
