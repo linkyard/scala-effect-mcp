@@ -6,7 +6,7 @@ object Dependencies {
   val cats = "2.13.0"
   val catsEffect = "3.6.1"
   val catsEffectCps = "0.3.0"
-  val fs2 = "3.13.0"
+  val fs2 = "3.14.0"
   val circe = "0.14.15"
   val scalaJsonSchema = "0.2.0"
   val http4s = "0.23.34"
