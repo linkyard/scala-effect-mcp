@@ -223,8 +223,8 @@ object McpServerRoute:
     case _ => Status.Ok
 
   private val HeaderMismatch = -32020
-  private val UnsupportedProtocolVersion = -32021
-  private val MissingRequiredClientCapability = -32022
+  private val UnsupportedProtocolVersion = -32022
+  private val MissingRequiredClientCapability = -32021
 
   private def sseResponse(events: Stream[IO, ServerSentEvent], extraHeaders: List[Header.ToRaw]): Response[IO] =
     Response[IO](Status.Ok)
