@@ -341,15 +341,13 @@ object McpServerRoute:
       Logger[IO].info(s"Rejected request with origin ${req.headers.get(ci"Origin").map(_.head.value).orEmpty}") >>
         jsonRpcError(Status.Forbidden, None, JsonRpc.ErrorCode.InvalidRequest, "Origin not allowed")
 
+  /** Only the origins that the configuration accepts. The host of the request is not a criterion: with DNS rebinding
+    * the origin of the attacker has the same host as the request.
+    */
   private def originAcceptable(req: Request[IO], config: McpServerRouteConfig): Boolean =
     req.headers.get[Origin] match
       case None         => req.headers.get(ci"Origin").isEmpty // an unparsable header is rejected
-      case Some(origin) =>
-        val sameHost = origin match
-          case Origin.HostList(hosts) =>
-            req.serverHost.exists(h => hosts.forall(_.host.renderString.equalsIgnoreCase(h.renderString)))
-          case _ => false
-        sameHost || config.originAllowed(origin)
+      case Some(origin) => config.originAllowed(origin)
 
   // context
 

@@ -372,8 +372,20 @@ class McpServerRouteSpec extends AnyFunSpec with Matchers:
       }
     }
 
-    it("accepts the host of the request") {
+    it("rejects an origin that has the same host as the request (DNS rebinding)") {
       withRoute() { f =>
+        for
+          res <- run(f, withOrigin("https://mcp.example.com"))
+          calls <- f.factory.statelessHandler.requests.get
+        yield
+          res.status shouldBe Status.Forbidden
+          calls shouldBe empty
+      }
+    }
+
+    it("accepts the origin of the request if the configuration allows it") {
+      val config = McpServerRouteConfig(originAllowed = _.toString.contains("mcp.example.com"))
+      withRoute(config = config) { f =>
         for res <- run(f, withOrigin("https://mcp.example.com"))
         yield res.status shouldBe Status.Ok
       }

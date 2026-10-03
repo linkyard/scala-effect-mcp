@@ -7,9 +7,10 @@ import scala.concurrent.duration.*
 /** Configuration of the [[McpServerRoute]].
   *
   * @param originAllowed
-  *   decides about requests with an `Origin` header, in addition to the origins that have the same host as the request
-  *   (`X-Forwarded-Host` or `Host` header). Requests with a rejected origin are answered with 403. By default only
-  *   `localhost` and its loopback addresses are accepted.
+  *   decides about requests with an `Origin` header, requests with a rejected origin are answered with 403. Requests
+  *   without `Origin` header (clients that are not browsers) are always accepted. The host of the request does not
+  *   matter, because the origin of a DNS rebinding attack has the same host as the request. By default only `localhost`
+  *   and its loopback addresses are accepted, a server that is used by browsers has to allow their origins.
   * @param keepAliveInterval
   *   interval of the SSE comments that keep open streams alive
   */

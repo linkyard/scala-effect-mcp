@@ -249,6 +249,13 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
         }
         status shouldBe Status.Forbidden
       }
+
+      it("should not accept an origin that has the host of the request (DNS rebinding)") {
+        val status = withHttp() { h =>
+          h.run(h.modern(1, "tools/list").putHeaders(Header.Raw(ci"Origin", "http://mcp.example.com"))).map(_.status)
+        }
+        status shouldBe Status.Forbidden
+      }
     }
 
     describe("with a client of an earlier version") {
