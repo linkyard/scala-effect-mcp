@@ -8,16 +8,16 @@ Source: [StdioDemoMcpServer.scala](src/main/scala/ch/linkyard/mcp/example/demo/S
 
 - **Multiple Tools**:
   - `parrot`: Simple text echo with modification
-  - `adder`: Mathematical operation with progress reporting and logging
-  - `userEmail`: Complex tool using elicitation and sampling to find user emails
+  - `adder`: Mathematical operation with progress reporting
+  - `userEmail`: Tool that asks the user for the company name (elicitation with `ToolFunction.interactiveText`) and guesses the email address
 - **Prompts**: Story generation prompt with argument completion
 - **Resources**: Animal database with 20 animals, resource templates, and autocomplete
-- **Advanced Features**: Progress reporting, logging, elicitation, sampling, and completion
+- **Advanced Features**: Progress reporting, elicitation, and completion
 
 ## What It Showcases
 
 - How to implement complex workflows using multiple MCP concepts
-- Integration between different features (tools calling elicitation and sampling)
+- Integration between different features (tools asking the user a question)
 - Resource management with pagination and templates
 - Error handling and user interaction patterns
 - Stdio connection
