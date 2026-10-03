@@ -64,6 +64,7 @@ lazy val root = (project in file("."))
     exampleSimpleAuthenticated,
     exampleDemo,
     exampleDemoHttp,
+    exampleConformance,
   )
 
 ThisBuild / commands += Command.command("cleanup") { state =>
@@ -202,3 +203,20 @@ lazy val exampleDemoHttp = (project in file("example/demo-http"))
     libraryDependencies ++= Dependencies.logBinding,
   )
   .dependsOn(exampleDemo, transportHttp4s)
+
+/** Server for the official conformance test suite (see the README of the example). */
+lazy val exampleConformance = (project in file("example/conformance"))
+  .settings(
+    name := "example-conformance",
+    run / fork := true,
+    assembly / aggregate := true,
+    assembly / mainClass := Some("ch.linkyard.mcp.example.conformance.ConformanceMcpServer"),
+    assembly / assemblyJarName := "conformance.jar",
+    assembly / test := {},
+    publish / skip := true,
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
+    ),
+    libraryDependencies ++= Dependencies.logBinding,
+  )
+  .dependsOn(mcpServer, transportHttp4s)

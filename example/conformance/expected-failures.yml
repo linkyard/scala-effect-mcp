@@ -1,0 +1,45 @@
+# Known failures of the conformance suite (see README.md).
+#
+# The library does not implement sampling, roots, logging, tasks and resumable streams. Sampling, roots
+# and logging are deprecated in 2026-07-28 and were removed from the API on purpose (MIGRATION.md,
+# "Removed Features"). Specification 2026-07-28, client/sampling.mdx: "New implementations SHOULD NOT
+# adopt it". The same sentence is in client/roots.mdx and server/utilities/logging.mdx.
+# Every entry is a feature that is left out, not a bug. The tools of the reference server that need such a
+# feature are not part of the example server, so the scenarios fail with "Tool ... not found".
+server:
+  # Sampling (sampling/createMessage as input request or as request of the server).
+  - input-required-result-basic-sampling:sep-2322-sampling-incomplete
+  - tools-call-sampling
+
+  # Roots (roots/list as input request).
+  - input-required-result-basic-list-roots:sep-2322-list-roots-incomplete
+
+  # Needs input requests for sampling and roots/list next to the elicitation.
+  - input-required-result-multiple-input-requests:sep-2322-multiple-inputs-incomplete
+
+  # The scenario declares only the sampling capability and expects an input request for sampling. A
+  # server that cannot sample sends none, which the specification allows: "A server MUST NOT rely on
+  # capabilities the client has not declared" (basic/index.mdx).
+  - input-required-result-capability-check:sep-2322-respect-client-capabilities
+
+  # Logging. The server never sends notifications/message, so it keeps the rule "The server MUST NOT emit
+  # notifications/message for a request that does not include this field" (server/utilities/logging.mdx).
+  # The check reports "not testable" because the diagnostic tool test_logging_tool (needs logging) is missing.
+  - server-stateless:sep-2575-server-no-log-without-loglevel
+  - tools-call-with-logging
+
+  # Resumable SSE streams (SEP-1699, event ids and Last-Event-ID, pending suite, revisions before 2026-07-28).
+  # The scenario needs the tool test_reconnection, which closes the stream of the call. Resumability is
+  # optional: "Servers MAY attach an id field to their SSE events" (2025-11-25, basic/transports.mdx).
+  - server-sse-polling
+
+  # Tasks extension (pending suite; with --requirements the scenarios are run but not scored).
+  - tasks-lifecycle
+  - tasks-capability-negotiation
+  - tasks-wire-fields
+  - tasks-request-state-removal
+  - tasks-mrtr-input
+  - tasks-request-headers
+  - tasks-dispatch-and-envelope
+  - tasks-required-task-error
+  - tasks-mrtr-composition
