@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.kernel.Resource
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.MinimalOAuthAuthorizationServer.ClientCredentials
 import io.circe.Json
+import io.circe.JsonObject
 import io.circe.syntax.*
 import org.http4s.*
 import org.http4s.circe.*
@@ -13,12 +14,22 @@ import org.http4s.server.middleware.CORS
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-/** Minimal OAuth Authorization Server that takes auth and token URLs and issuer from external */
+/** Minimal OAuth Authorization Server that takes auth and token URLs and issuer from external.
+  *
+  * Limitation: the served metadata contains the `issuer` of the upstream server but is hosted on the MCP server.
+  * Clients that follow the MCP specification (2026-07-28) check that the `issuer` equals the issuer used to build the
+  * well-known URL and will reject this document. Prefer pointing `OAuthMiddleware.authorizationServers` directly to the
+  * upstream authorization server.
+  *
+  * The optional pseudo dynamic client registration is kept for compatibility. Dynamic Client Registration is deprecated
+  * in the 2026-07-28 revision in favor of Client ID Metadata Documents.
+  */
 class MinimalOAuthAuthorizationServer(
   issuer: String,
   authorizationEndpoint: Uri,
   tokenEndpoint: Uri,
   pseudoDynamicClient: Option[ClientCredentials] = None,
+  extraMetadata: JsonObject = JsonObject.empty,
 ):
   private given Logger[IO] = Slf4jLogger.getLogger[IO]
 
@@ -61,7 +72,7 @@ class MinimalOAuthAuthorizationServer(
         "authorization_endpoint" -> authorizationEndpoint.toString.asJson,
         "token_endpoint" -> tokenEndpoint.toString.asJson,
         "response_types_supported" -> responseTypesSupported.asJson,
-      )
+      ).deepMerge(Json.fromJsonObject(extraMetadata))
 
       // Add registration_endpoint if pseudoDynamicClient is provided
       val finalConfig = pseudoDynamicClient match
@@ -111,8 +122,24 @@ object MinimalOAuthAuthorizationServer:
         )
         authEndpoint <- IO.fromEither(Uri.fromString(authEndpointStr))
         tokenEndpoint <- IO.fromEither(Uri.fromString(tokenEndpointStr))
-      yield MinimalOAuthAuthorizationServer(issuer, authEndpoint, tokenEndpoint, pseudoDynamicClient)
+      yield MinimalOAuthAuthorizationServer(
+        issuer,
+        authEndpoint,
+        tokenEndpoint,
+        pseudoDynamicClient,
+        copiedMetadata(json),
+      )
     })
+
+  private val copiedFields = List(
+    "authorization_response_iss_parameter_supported",
+    "client_id_metadata_document_supported",
+    "code_challenge_methods_supported",
+  )
+
+  /** Upstream fields that are passed through to the served metadata when present. */
+  private[http4s] def copiedMetadata(upstream: Json): JsonObject =
+    JsonObject.fromIterable(copiedFields.flatMap(f => upstream.hcursor.downField(f).focus.map(f -> _)))
 
   case class ClientCredentials(
     clientId: String,

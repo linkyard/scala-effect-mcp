@@ -10,7 +10,13 @@ import org.http4s.client.Client
 import org.http4s.dsl.io.*
 import org.http4s.server.middleware.CORS
 
-/** For oidc server that do not support the .well-known/oauth-authorization-server */
+/** For oidc server that do not support the .well-known/oauth-authorization-server.
+  *
+  * Limitation: this re-serves the metadata of an upstream server under the host of the MCP server, but the `issuer` in
+  * it still names the upstream server. Clients that follow the MCP specification (2026-07-28) check that the `issuer`
+  * equals the issuer used to build the well-known URL and will reject this document. Prefer pointing
+  * `OAuthMiddleware.authorizationServers` directly to the upstream authorization server.
+  */
 class OAuthAuthorizationServer(authConfig: IO[Json]):
   def route = wellKnownRoutes
 
