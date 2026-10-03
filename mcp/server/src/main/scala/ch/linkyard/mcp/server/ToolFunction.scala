@@ -76,6 +76,20 @@ object ToolFunction:
     meta: Option[JsonObject] = None,
   ): ToolFunction[F] = new Structured[F, A, B](info, meta, f)
 
+  /** Like [[text]] but the function can ask the user questions (see [[Ask]], it runs again after each answer). */
+  def interactiveText[F[_]: MonadThrow, A: JsonSchemaEncoder: Decoder](
+    info: Info,
+    f: (A, RequestContext[F], Ask[F]) => F[String],
+    meta: Option[JsonObject] = None,
+  ): ToolFunction[F] = new InteractiveText[F, A](info, meta, f)
+
+  /** Like [[structured]] but the function can ask the user questions (see [[Ask]], it runs again after each answer). */
+  def interactiveStructured[F[_]: MonadThrow, A: JsonSchemaEncoder: Decoder, B: JsonSchemaEncoder: Encoder.AsObject](
+    info: Info,
+    f: (A, RequestContext[F], Ask[F]) => F[B],
+    meta: Option[JsonObject] = None,
+  ): ToolFunction[F] = new InteractiveStructured[F, A, B](info, meta, f)
+
   def native[F[_]](
     info: Info,
     argsSchema: JsonSchema,
@@ -134,6 +148,35 @@ object ToolFunction:
           ))
         }
       )
+
+  private class InteractiveText[F[_]: MonadThrow, A: Decoder: JsonSchemaEncoder](
+    val info: Info,
+    val meta: Option[JsonObject],
+    f: (A, RequestContext[F], Ask[F]) => F[String],
+  ) extends ToolFunction[F]:
+    override val argsSchema: JsonSchema = schemaFor[A]
+    override val resultSchema: Option[JsonSchema] = None
+    override def apply(args: JsonObject, context: RequestContext[F]): F[Outcome[Response]] =
+      handleParsedArgs[F, A](args)(a =>
+        Ask.run(context)(ask => f(a, context, ask)).map(_.map(text => CallTool.Response.Success(List(Content.Text(text)), None)))
+      )
+  end InteractiveText
+
+  private class InteractiveStructured[F[_]: MonadThrow, A: JsonSchemaEncoder: Decoder, B: JsonSchemaEncoder: Encoder.AsObject](
+    val info: Info,
+    val meta: Option[JsonObject],
+    f: (A, RequestContext[F], Ask[F]) => F[B],
+  ) extends ToolFunction[F]:
+    override val argsSchema: JsonSchema = schemaFor[A]
+    override val resultSchema: Option[JsonSchema] = schemaFor[B].some
+    override def apply(args: JsonObject, context: RequestContext[F]): F[Outcome[Response]] =
+      handleParsedArgs[F, A](args)(a =>
+        Ask.run(context)(ask => f(a, context, ask)).map(_.map { b =>
+          val json = b.asJsonObject
+          CallTool.Response.Success(List(Content.Text(json.toJson.noSpaces)), json.toJson.some)
+        })
+      )
+  end InteractiveStructured
 
   private class Native[F[_]](
     val info: Info,
