@@ -102,21 +102,13 @@ class OAuthMiddlewareSpec extends AnyFunSpec with Matchers:
       res.status shouldBe Status.Ok
     }
 
-    it("keeps accepting a Boolean validator") {
-      val mw = OAuthMiddleware(
-        name = "legacy",
-        authorizationServers = Nil,
-        scopes = Nil,
-        validateToken = t => IO.pure(t.nonEmpty),
-        root = Root,
-      )
-      run(mw.protectMcp(echo), mcpRequest(bearer("tok"))).status shouldBe Status.Ok
-      val res = run(mw.protectMcp(echo), mcpRequest(bearer("x")))
-      res.status shouldBe Status.Ok
-      val denied = OAuthMiddleware("legacy", Nil, Nil, _ => IO.pure(false))
-      val res2 = run(denied.protectMcp(echo), mcpRequest(bearer("tok")))
-      res2.status shouldBe Status.Unauthorized
-      challenge(res2).params.get("scope") shouldBe None
+    it("converts a boolean decision") {
+      val allowing = OAuthMiddleware("simple", Nil, Nil, t => IO.pure(TokenValidation.of(t.nonEmpty)))
+      run(allowing.protectMcp(echo), mcpRequest(bearer("tok"))).status shouldBe Status.Ok
+      val denying = OAuthMiddleware("simple", Nil, Nil, _ => IO.pure(TokenValidation.of(false)))
+      val res = run(denying.protectMcp(echo), mcpRequest(bearer("tok")))
+      res.status shouldBe Status.Unauthorized
+      challenge(res).params.get("scope") shouldBe None
     }
   }
 

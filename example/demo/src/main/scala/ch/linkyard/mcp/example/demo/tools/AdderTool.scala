@@ -2,7 +2,6 @@ package ch.linkyard.mcp.example.demo.tools
 
 import cats.effect.IO
 import cats.implicits.*
-import ch.linkyard.mcp.protocol.LoggingLevel
 import ch.linkyard.mcp.server.ToolFunction
 import com.melvinlow.json.schema.generic.auto.given
 import io.circe.generic.auto.given
@@ -22,8 +21,6 @@ object AdderTool:
       isOpenWorld = false,
     ),
     (in: AdderInput, context) =>
-      context.log(
-        LoggingLevel.Info,
-        "Will perform addition now, this will take some time",
-      ) >> IO.sleep(1.second) >> context.reportProgress(0.5d, 1d.some) >> IO(AdderOutput(in.a + in.b)),
+      context.reportProgress(0d, 1d.some, "Will perform addition now, this will take some time".some) >>
+        IO.sleep(1.second) >> context.reportProgress(0.5d, 1d.some) >> IO(AdderOutput(in.a + in.b)),
   )

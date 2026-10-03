@@ -59,6 +59,7 @@ lazy val root = (project in file("."))
     transportHttp4s,
     mcpProtocol,
     mcpServer,
+    integrationTests,
     exampleSimpleEcho,
     exampleSimpleAuthenticated,
     exampleDemo,
@@ -127,6 +128,18 @@ lazy val mcpServer = (project in file("mcp/server"))
     ),
   ).dependsOn(jsonrpc2, mcpProtocol)
 
+
+/** Tests that run the server together with the transports. */
+lazy val integrationTests = (project in file("integration-tests"))
+  .settings(
+    name := "integration-tests",
+    publish / skip := true,
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-circe" % Dependencies.http4s,
+      "com.melvinlow" %% "scala-json-schema" % Dependencies.scalaJsonSchema,
+      "io.circe" %% "circe-generic" % Dependencies.circe,
+    ),
+  ).dependsOn(mcpServer, transportStdio, transportHttp4s)
 
 lazy val exampleSimpleEcho = (project in file("example/simple-echo"))
   .settings(

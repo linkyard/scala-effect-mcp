@@ -25,6 +25,10 @@ enum TokenValidation:
     */
   case InsufficientScope(requiredScopes: List[String])
 
+object TokenValidation:
+  /** For validators that only decide between valid and invalid. */
+  def of(valid: Boolean): TokenValidation = if valid then Valid else Invalid
+
 /** Protects routes with OAuth bearer tokens and serves the OAuth 2.0 Protected Resource Metadata (RFC 9728).
   *
   * @param authorizationServers
@@ -122,41 +126,6 @@ object OAuthMiddleware:
     audienceOverride: Option[Uri] = None,
   ): OAuthMiddleware =
     new OAuthMiddleware(name, authorizationServers, scopes, validateToken, root, audienceOverride)
-
-  /** Variant for validators that only decide between valid and invalid. */
-  def apply(
-    name: String,
-    authorizationServers: List[Uri],
-    scopes: List[String],
-    validateToken: String => IO[Boolean],
-    root: Path,
-    audienceOverride: Option[Uri],
-  )(using DummyImplicit): OAuthMiddleware =
-    new OAuthMiddleware(
-      name,
-      authorizationServers,
-      scopes,
-      token => validateToken(token).map(if _ then TokenValidation.Valid else TokenValidation.Invalid),
-      root,
-      audienceOverride,
-    )
-
-  def apply(
-    name: String,
-    authorizationServers: List[Uri],
-    scopes: List[String],
-    validateToken: String => IO[Boolean],
-    root: Path,
-  )(using DummyImplicit): OAuthMiddleware =
-    apply(name, authorizationServers, scopes, validateToken, root, None)
-
-  def apply(
-    name: String,
-    authorizationServers: List[Uri],
-    scopes: List[String],
-    validateToken: String => IO[Boolean],
-  )(using DummyImplicit): OAuthMiddleware =
-    apply(name, authorizationServers, scopes, validateToken, Root, None)
 
   /** RFC 9728 protected resource metadata document. */
   private[http4s] def protectedResourceMetadata(

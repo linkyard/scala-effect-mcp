@@ -2,7 +2,6 @@ package ch.linkyard.mcp.example.demo.resources
 
 import cats.effect.IO
 import cats.implicits.*
-import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.protocol.Cursor
 import ch.linkyard.mcp.protocol.Resource as Res
 import ch.linkyard.mcp.protocol.Resources.ReadResource
@@ -22,7 +21,7 @@ object AnimalResource:
             )
           )
         ).pure
-      case None => McpError.raise(ErrorCode.InvalidParams, s"Resource $uri not found")
+      case None => IO.raiseError(McpError.resourceNotFound(uri))
 
   def resources(after: Option[Cursor]): fs2.Stream[IO, Pageable[Res]] =
     fs2.Stream.emits(AnimalBox.animals

@@ -6,7 +6,8 @@ import cats.effect.IOApp
 import cats.effect.kernel.Resource
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.McpServerRoute
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
-import ch.linkyard.mcp.server.McpServer
+import ch.linkyard.mcp.server.McpServer.*
+import ch.linkyard.mcp.server.McpServerConfig
 import com.comcast.ip4s.Host
 import com.comcast.ip4s.Port
 import org.http4s.client.Client
@@ -26,10 +27,10 @@ object HttpDemoMcpServer extends IOApp:
   private def program: Resource[IO, Unit] =
     for
       given SessionStore[IO] <- SessionStore.inMemory[IO](30.minutes)
-      handler = DemoServer().jsonRpcConnectionHandler(logError)
+      factory = DemoServer().handlerFactory(McpServerConfig.default, logError)
       given Client[IO] <- EmberClientBuilder.default[IO].build
       // if you need authentication see the simple-authenticated example
-      route = McpServerRoute.route(handler)
+      route = McpServerRoute.route(factory)
       _ <- EmberServerBuilder.default[IO]
         .withHost(Host.fromString("127.0.0.1").get)
         .withPort(Port.fromInt(18283).get)
@@ -37,5 +38,5 @@ object HttpDemoMcpServer extends IOApp:
         .build
     yield ()
 
-  private def logError(error: Exception): IO[Unit] =
-    Logger[IO].warn(error)(s"Error parsing request data")
+  private def logError(error: Throwable): IO[Unit] =
+    Logger[IO].warn(error)("Error while handling a request")
