@@ -36,7 +36,7 @@ object McpServer:
     def handlerFactory(config: McpServerConfig, logError: Throwable => F[Unit])(using
       Async[F]
     ): JsonRpcHandlerFactory[F] =
-      McpServerHandlers(ServerCore(server, config, logError), config, logError)
+      McpServerHandlers(ServerCore(server, config, logError))
 
     /** Serves a connection until its input ends (the connection of the stdio transport for example). */
     def run(connection: JsonRpcConnection[F], logError: Throwable => F[Unit], config: McpServerConfig)(using

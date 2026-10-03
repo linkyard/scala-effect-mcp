@@ -118,6 +118,23 @@ object TestSupport:
             IO.pure(Outcome.elicit("name", "Who are you?", ElicitationField.Text("name", true)).withState("asked"))
     )
     private val admin = ToolFunction.text[IO, Echo](info("admin"), (_, _) => IO.pure("admin"))
+    private val iconic = ToolFunction.text[IO, Echo](
+      info("iconic").copy(icons = Some(List(Icon("https://example.com/icon.png")))),
+      (in, _) => IO.pure(in.text),
+    )
+    /** structured content that is not an object (not possible in the earlier versions) */
+    private val arrays = ToolFunction.native[IO](
+      info("arrays"),
+      JsonObject("type" -> "object".asJson),
+      (_, _) =>
+        IO.pure(Outcome.Complete(Tool.CallTool.Response.Success(List(Content.Text("[1,2]")), Some(Json.arr(1.asJson, 2.asJson))))),
+    )
+    /** never satisfied */
+    private val needy = ToolFunction.native[IO](
+      info("needy"),
+      JsonObject("type" -> "object".asJson),
+      (_, _) => IO.pure(Outcome.elicit("again", "Still there?", ElicitationField.YesNo("yes", true))),
+    )
 
     override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] =
       toolsRef.get.map(_ ++ (if context.authentication == Authentication.BearerToken("admin") then List(admin) else Nil))
@@ -183,5 +200,5 @@ object TestSupport:
         updates <- fs2.concurrent.Topic[IO, String]
         seen <- Ref.of[IO, List[RequestContext[IO]]](Nil)
         server = FixtureServer(tools, cancelled, started, changes, updates, seen)
-        _ <- tools.set(List(server.echo, server.add, server.failing, server.crashing, server.slow, server.progress, server.whoami, server.ask))
+        _ <- tools.set(List(server.echo, server.add, server.failing, server.crashing, server.slow, server.progress, server.whoami, server.ask, server.iconic, server.arrays, server.needy))
       yield server

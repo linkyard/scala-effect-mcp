@@ -128,7 +128,19 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should list the tools sorted by name with annotations and the cache hints") {
         val result = withFixture(f => call(f, 1, "tools/list")).result
         val response = result.asJson.as[Tool.ListTools.Response].value
-        response.tools.map(_.name) shouldBe List("add", "ask", "crashing", "echo", "failing", "progress", "slow", "whoami")
+        response.tools.map(_.name) shouldBe List(
+          "add",
+          "arrays",
+          "ask",
+          "crashing",
+          "echo",
+          "failing",
+          "iconic",
+          "needy",
+          "progress",
+          "slow",
+          "whoami",
+        )
         response.tools.find(_.name == "echo").value.annotations.value.readOnlyHint shouldBe Some(true)
         response.tools.find(_.name == "echo").value.description shouldBe Some("the echo tool")
         response.ttlMs shouldBe 300000

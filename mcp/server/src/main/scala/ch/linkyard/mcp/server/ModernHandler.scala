@@ -10,7 +10,6 @@ import ch.linkyard.mcp.jsonrpc2.JsonRpcHandler
 import ch.linkyard.mcp.protocol.*
 import ch.linkyard.mcp.protocol.McpCodec.DecodeError
 import ch.linkyard.mcp.protocol.McpCodec.fromJsonRpc
-import ch.linkyard.mcp.server.McpError.McpErrorException
 import fs2.Stream
 import io.circe.Json
 import io.circe.syntax.*
@@ -84,9 +83,10 @@ private[server] final class ModernHandler[F[_]](core: ServerCore[F], supportedVe
       notifications.map(n => McpCodec.encodeNotification(n.withMeta(meta))) ++
       Stream.emit(McpCodec.encodeResponse(id.fromJsonRpc, Subscriptions.Listen.Response(meta)))
 
-  private def errorResponse(id: JsonRpc.Id, error: Throwable): F[JsonRpc.Message] = error match
-    case McpErrorException(e) => JsonRpc.Response.Error(id, e.errorCode, e.message, e.data).pure[F].widen
-    case other => core.logError(other).as(JsonRpc.Response.Error(id, ErrorCode.InternalError, "Internal error", None))
+  private def errorResponse(id: JsonRpc.Id, error: Throwable): F[JsonRpc.Message] =
+    Errors.protocolError(id, error, legacy = false) match
+      case Some(response) => response.pure[F].widen
+      case None           => core.logError(error).as(Errors.internal(id))
 end ModernHandler
 
 extension (response: ServerResponse)
