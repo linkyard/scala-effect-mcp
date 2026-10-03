@@ -1,5 +1,6 @@
 package ch.linkyard.mcp.server
 
+import cats.effect.Deferred
 import cats.effect.implicits.*
 import cats.effect.kernel.Async
 import cats.effect.std.Queue
@@ -73,7 +74,10 @@ private[server] final class ModernHandler[F[_]](core: ServerCore[F], supportedVe
       Stream.fromQueueNoneTerminated(queue).concurrently(Stream.eval(run))
     }
 
-  /** Acknowledges the subscription and sends the notifications until the client cancels it. */
+  /** Acknowledges the subscription and sends the notifications until the client cancels it. The sources of the
+    * notifications are started before the acknowledgement is sent: a change that a client causes after it received the
+    * acknowledgement must not get lost.
+    */
   private def subscription(
     listen: Subscriptions.Listen,
     id: JsonRpc.Id,
@@ -81,9 +85,16 @@ private[server] final class ModernHandler[F[_]](core: ServerCore[F], supportedVe
   ): Stream[F, JsonRpc.Message] =
     val meta = Meta(Meta.Key.SubscriptionId -> id.fromJsonRpc.asJson)
     val (accepted, notifications) = core.listen(listen.notifications, core.context(listen._meta, env))
-    Stream.emit(McpCodec.encodeNotification(Subscriptions.Acknowledged(accepted, meta))) ++
-      notifications.map(n => McpCodec.encodeNotification(n.withMeta(meta))) ++
-      Stream.emit(McpCodec.encodeResponse(id.fromJsonRpc, Subscriptions.Listen.Response(meta)))
+    val acknowledged = McpCodec.encodeNotification(Subscriptions.Acknowledged(accepted, meta))
+    val response = McpCodec.encodeResponse(id.fromJsonRpc, Subscriptions.Listen.Response(meta))
+    Stream.eval((Deferred[F, Unit], Queue.bounded[F, Option[JsonRpc.Message]](1024)).tupled).flatMap {
+      (started, queue) =>
+        val pump = (Stream.exec(started.complete(()).void) ++
+          notifications.map(n => McpCodec.encodeNotification(n.withMeta(meta))))
+          .evalMap(message => queue.offer(Some(message))) ++ Stream.exec(queue.offer(None))
+        (Stream.exec(started.get) ++ Stream.emit(acknowledged) ++ Stream.fromQueueNoneTerminated(queue) ++
+          Stream.emit(response)).concurrently(pump)
+    }
 
   private def errorResponse(id: JsonRpc.Id, error: Throwable): F[JsonRpc.Message] =
     Errors.protocolError(id, error, legacy = false) match

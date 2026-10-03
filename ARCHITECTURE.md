@@ -239,7 +239,7 @@ Clients of 2026-07-28 learn about changes with `subscriptions/listen`. The reque
 2. the notifications (`tools/list_changed`, `prompts/list_changed`, `resources/list_changed`, `resources/updated`), each tagged with the subscription id (the request id) in `_meta`
 3. a final empty result when the server ends the subscription
 
-The notifications come from `toolChanges`, `promptChanges`, `resourceChanges` and `resourceUpdates(uri, context)`, merged in `ServerCore.listen`. The stream ends when the client cancels it (closes the HTTP stream or sends `notifications/cancelled` on stdio).
+The notifications come from `toolChanges`, `promptChanges`, `resourceChanges` and `resourceUpdates(uri, context)`, merged in `ServerCore.listen`. The handler starts these streams before it sends the acknowledgement, so that a change which a client causes right after the acknowledgement is not lost. A stream has to register its subscription when it is started (`Topic.subscribe` does). The stream ends when the client cancels it (closes the HTTP stream or sends `notifications/cancelled` on stdio).
 
 ## Legacy clients
 

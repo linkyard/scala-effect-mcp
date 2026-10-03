@@ -565,6 +565,24 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
         received shouldBe List("notifications/subscriptions/acknowledged", "notifications/resources/updated")
       }
 
+      it("should start the sources of the notifications before it acknowledges") {
+        val running = (for
+          started <- Ref.of[IO, Boolean](false)
+          server = new McpServer[IO] with ToolProviderWithChanges[IO]:
+            override val serverInfo: Implementation = Implementation("s", "1")
+            override def instructions: IO[Option[String]] = IO.pure(None)
+            override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] = IO.pure(Nil)
+            override def toolChanges: fs2.Stream[IO, Unit] = fs2.Stream.exec(started.set(true)) ++ fs2.Stream.never[IO]
+          handler = server.handlerFactory(McpServerConfig(supportLegacyClients = false), _ => IO.unit).stateless
+          // the client is busy with the acknowledgement, the sources must have started by now (it reacts at once)
+          running <- handler.request(
+            request(7, "subscriptions/listen", "notifications" -> json"""{"toolsListChanged": true}"""),
+            context(),
+          ).take(1).evalMap(_ => IO.sleep(200.millis) >> started.get).compile.lastOrError
+        yield running).run
+        running shouldBe true
+      }
+
       it("should end the subscription at once when the server accepts nothing") {
         val received = withFixture(f => listen(f, json"""{"promptsListChanged": true}""").compile.toList)
         received.map {
