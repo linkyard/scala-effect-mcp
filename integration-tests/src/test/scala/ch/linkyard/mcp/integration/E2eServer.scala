@@ -2,6 +2,7 @@ package ch.linkyard.mcp.integration
 
 import cats.effect.IO
 import cats.effect.kernel.Deferred
+import cats.effect.kernel.Ref
 import cats.implicits.*
 import ch.linkyard.mcp.protocol.Content
 import ch.linkyard.mcp.protocol.ElicitAction
@@ -26,6 +27,9 @@ class E2eServer(
   val changes: Topic[IO, Unit],
   val slowStarted: Deferred[IO, Unit],
   val slowCancelled: Deferred[IO, Unit],
+  val gate: Deferred[IO, Unit],
+  val bothEntered: Deferred[IO, Unit],
+  entered: Ref[IO, Int],
 ) extends McpServer[IO] with ToolProvider[IO] with ToolProviderWithChanges[IO]:
   override val serverInfo: Implementation = Implementation("e2e", "1.0")
   override def instructions: IO[Option[String]] = IO.pure(Some("test server"))
@@ -52,6 +56,13 @@ class E2eServer(
   )
 
   /** The parameter `region` is mirrored into the header `Mcp-Param-Region`. */
+  /** waits until the gate is opened, answers with the text of its own request */
+  private val gated = ToolFunction.text[IO, E2eServer.Text](
+    info("gated"),
+    (in, _) =>
+      entered.updateAndGet(_ + 1).flatMap(n => IO.whenA(n == 2)(bothEntered.complete(()).void)) >>
+        gate.get.as(s"answer for ${in.text}"),
+  )
   private val regional = ToolFunction.native[IO](
     info("regional"),
     JsonObject(
@@ -66,10 +77,17 @@ class E2eServer(
       ))),
   )
   override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] =
-    IO.pure(List(echo, progress, slow, ask, regional))
+    IO.pure(List(echo, progress, slow, ask, regional, gated))
 
 object E2eServer:
   case class Text(text: String)
 
   def create: IO[E2eServer] =
-    (Topic[IO, Unit], Deferred[IO, Unit], Deferred[IO, Unit]).mapN(E2eServer(_, _, _))
+    (
+      Topic[IO, Unit],
+      Deferred[IO, Unit],
+      Deferred[IO, Unit],
+      Deferred[IO, Unit],
+      Deferred[IO, Unit],
+      Ref.of[IO, Int](0),
+    ).mapN(E2eServer(_, _, _, _, _, _))

@@ -368,6 +368,26 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
         ).downField("content").focus.value shouldBe json"""[{"type": "text", "text": "hello Bo"}]"""
       }
 
+      it("should answer clients that share the session and use the same request id each with their own answer") {
+        val (a, b) = withHttp() { h =>
+          def call(text: String, tool: String)(session: String) =
+            h.run(h.legacy(7, "tools/call", json"""{"name": $tool, "arguments": {"text": $text}}""", Some(session)))
+              .flatMap(_.as[Json]).start
+          for
+            (_, session) <- initialize(h)
+            fa <- call("client A", "gated")(session)
+            fb <- call("client B", "gated")(session)
+            _ <- h.server.bothEntered.get.timeout(5.seconds)
+            _ <- h.server.gate.complete(())
+            a <- fa.joinWithNever
+            b <- fb.joinWithNever
+          yield a -> b
+        }
+        def text(body: Json) = body.hcursor.downField("result").downField("content").downArray.get[String]("text").value
+        text(a) shouldBe "answer for client A"
+        text(b) shouldBe "answer for client B"
+      }
+
       it("should stream the changes on the get stream of the session") {
         val notification = withHttp() { h =>
           for

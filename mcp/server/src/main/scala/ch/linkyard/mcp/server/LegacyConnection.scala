@@ -38,7 +38,7 @@ private[server] final class LegacyConnection[F[_]] private (
   /** The requests of the server that wait for the answer of the client */
   pending: Ref[F, Map[JsonRpc.Id, Deferred[F, JsonRpc.Response]]],
   /** Signals for the requests that the client may cancel */
-  cancelSignals: Ref[F, Map[JsonRpc.Id, Deferred[F, Unit]]],
+  cancelSignals: Ref[F, Map[JsonRpc.Id, List[Deferred[F, Unit]]]],
   /** Stops the updates of a subscribed resource */
   subscriptions: Ref[F, Map[String, F[Unit]]],
 )(using F: Async[F]) extends JsonRpcHandler[F]:
@@ -77,7 +77,10 @@ private[server] final class LegacyConnection[F[_]] private (
   override def notification(notification: JsonRpc.Notification, context: JsonRpcHandler.Context): F[Unit] =
     LegacyCodec.decodeNotification(notification) match
       case Right(LegacyNotification.Cancelled(cancelled)) =>
-        cancelSignals.get.flatMap(_.get(cancelled.requestId.toJsonRpc).traverse_(_.complete(()).void))
+        // clients that share a session may use the same id, a cancellation of an ambiguous id is ignored
+        cancelSignals.get.flatMap(_.get(cancelled.requestId.toJsonRpc) match
+          case Some(single :: Nil) => single.complete(()).void
+          case _                   => F.unit)
       case _ => F.unit
 
   override def response(response: JsonRpc.Response, context: JsonRpcHandler.Context): F[Unit] =
@@ -147,11 +150,17 @@ private[server] final class LegacyConnection[F[_]] private (
         .handleErrorWith(errorResponse(id, _))
         .flatMap(message => queue.offer(Some(message)))
         .guarantee(queue.offer(None))
-      Stream.bracket(cancelSignals.update(_ + (id -> cancelled)))(_ => cancelSignals.update(_ - id)) >>
+      Stream.bracket(registerCancel(id, cancelled))(_ => unregisterCancel(id, cancelled)) >>
         Stream.fromQueueNoneTerminated(queue)
           .concurrently(Stream.eval(run))
           .interruptWhen(cancelled.get.attempt)
     }
+
+  private def registerCancel(id: JsonRpc.Id, signal: Deferred[F, Unit]): F[Unit] =
+    cancelSignals.update(_.updatedWith(id)(signals => Some(signal :: signals.getOrElse(Nil))))
+
+  private def unregisterCancel(id: JsonRpc.Id, signal: Deferred[F, Unit]): F[Unit] =
+    cancelSignals.update(_.updatedWith(id)(_.map(_.filterNot(_ eq signal)).filter(_.nonEmpty)))
 
   /** Executes the request, as long as the server needs input the client is asked and the request is retried. */
   private def resolve(
@@ -209,7 +218,7 @@ private[server] object LegacyConnection:
           Ref.of[F, Option[LegacySession]](None),
           Queue.unbounded[F, JsonRpc.Message],
           Ref.of[F, Map[JsonRpc.Id, Deferred[F, JsonRpc.Response]]](Map.empty),
-          Ref.of[F, Map[JsonRpc.Id, Deferred[F, Unit]]](Map.empty),
+          Ref.of[F, Map[JsonRpc.Id, List[Deferred[F, Unit]]]](Map.empty),
           Ref.of[F, Map[String, F[Unit]]](Map.empty),
         ).mapN(new LegacyConnection[F](core, supervisor, _, _, _, _, _))
       )
