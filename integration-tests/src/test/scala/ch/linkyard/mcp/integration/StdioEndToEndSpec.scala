@@ -82,7 +82,7 @@ class StdioEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with 
         tools.hcursor.downField(
           "result"
         ).downField("tools").as[List[Json]].value.map(_.hcursor.get[String]("name").value) shouldBe
-          List("ask", "echo", "progress", "slow")
+          List("ask", "echo", "progress", "regional", "slow")
         called.hcursor.downField("result").downField("content").focus.value shouldBe
           json"""[{"type": "text", "text": "hi"}]"""
       }

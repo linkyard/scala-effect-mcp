@@ -145,10 +145,17 @@ class McpServerRouteSpec extends AnyFunSpec with Matchers:
       }
     }
 
-    it("rejects a request without protocol version in the body") {
-      withRoute() { f =>
-        for res <- run(f, post(requestBody("ping", version = None), modernHeaders("ping")*))
-        yield res.status shouldBe Status.BadRequest
+    it("leaves a request without protocol version in the body to the handler, which answers it with -32602") {
+      val invalidParams = respondWith(i => List(error(i, -32602)))
+      withRoute(stateless = invalidParams) { f =>
+        for
+          res <- run(f, post(requestBody("ping", version = None), modernHeaders("ping")*))
+          body <- json(res)
+          calls <- f.factory.statelessHandler.requests.get
+        yield
+          res.status shouldBe Status.BadRequest
+          errorCode(body) shouldBe Some(-32602)
+          calls should have size 1
       }
     }
 
@@ -206,10 +213,25 @@ class McpServerRouteSpec extends AnyFunSpec with Matchers:
           ok <- run(f, modern("tools/call", params, Some(encoded)))
           wrong <- run(f, modern("tools/call", JsonObject("name" -> "x".asJson), Some(encoded)))
           invalid <- run(f, modern("tools/call", params, Some("=?base64?***?=")))
+          unpadded <- run(f, modern("tools/call", JsonObject("name" -> "Hello".asJson), Some("=?base64?SGVsbG8?=")))
         yield
           ok.status shouldBe Status.Ok
           wrong.status shouldBe Status.BadRequest
           invalid.status shouldBe Status.BadRequest
+          unpadded.status shouldBe Status.BadRequest // the padding is mandatory
+      }
+    }
+
+    it("passes the Mcp-Param headers to the handler, by their lower case name") {
+      withRoute() { f =>
+        val req = modern("tools/call", JsonObject("name" -> "t".asJson), Some("t"))
+          .putHeaders(Header.Raw(ci"Mcp-Param-Region", "us-west1"), Header.Raw(ci"X-Other", "ignored"))
+        for
+          res <- run(f, req)
+          calls <- f.factory.statelessHandler.requests.get
+        yield
+          res.status shouldBe Status.Ok
+          calls.head._2.paramHeaders shouldBe Some(Map("mcp-param-region" -> "us-west1"))
       }
     }
 
@@ -534,10 +556,23 @@ class McpServerRouteSpec extends AnyFunSpec with Matchers:
       }
     }
 
+    it("answers initialize of a current client, which carries the protocol version, like any other method") {
+      withRoute(stateless = respondWith(i => List(error(i, -32601)))) { f =>
+        for
+          res <- run(f, post(requestBody("initialize", id = 3), modernHeaders("initialize")*))
+          body <- json(res)
+          calls <- f.factory.statelessHandler.requests.get
+        yield
+          res.status shouldBe Status.NotFound
+          errorCode(body) shouldBe Some(-32601)
+          calls.map(_._1.method) shouldBe List("initialize")
+      }
+    }
+
     it("rejects initialize if sessions are not supported") {
       withRoute() { f =>
         for
-          res <- run(f, post(requestBody("initialize", id = 3)))
+          res <- run(f, post(requestBody("initialize", version = None, id = 3)))
           body <- json(res)
         yield
           res.status shouldBe Status.BadRequest
@@ -604,6 +639,19 @@ class McpServerRouteSpec extends AnyFunSpec with Matchers:
           calls.head._2.connection.additional.get("sessionId") shouldBe Some(sid.asJson)
           stateless shouldBe empty
           stored.flatten shouldBe defined
+      }
+    }
+
+    it("does not open a session for the initialize of a current client (a removed method)") {
+      withSessions() { (f, handler) =>
+        for
+          res <- run(f, post(requestBody("initialize"), modernHeaders("initialize")*))
+          infos <- f.factory.connections.get
+          stateless <- f.factory.statelessHandler.requests.get
+        yield
+          res.headers.get(ci"Mcp-Session-Id") shouldBe None
+          infos shouldBe empty
+          stateless.map(_._1.method) shouldBe List("initialize")
       }
     }
 

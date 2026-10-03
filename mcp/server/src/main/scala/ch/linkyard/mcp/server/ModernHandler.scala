@@ -61,6 +61,7 @@ private[server] final class ModernHandler[F[_]](core: ServerCore[F], supportedVe
         context.authentication,
         context.connection,
         notification => queue.offer(Some(McpCodec.encodeNotification(notification))),
+        context.paramHeaders,
       )
       val execution = (request match
         case _: Discover => core.discover(supportedVersions).widen[ServerResponse]

@@ -3,17 +3,23 @@ package ch.linkyard.mcp.integration
 import cats.effect.IO
 import cats.effect.kernel.Deferred
 import cats.implicits.*
+import ch.linkyard.mcp.protocol.Content
 import ch.linkyard.mcp.protocol.ElicitAction
 import ch.linkyard.mcp.protocol.Implementation
+import ch.linkyard.mcp.protocol.Tool
 import ch.linkyard.mcp.server.Ask
 import ch.linkyard.mcp.server.ElicitationField
 import ch.linkyard.mcp.server.McpServer
 import ch.linkyard.mcp.server.McpServer.*
+import ch.linkyard.mcp.server.Outcome
 import ch.linkyard.mcp.server.RequestContext
 import ch.linkyard.mcp.server.ToolFunction
 import com.melvinlow.json.schema.generic.auto.given
 import fs2.concurrent.Topic
+import io.circe.Json
+import io.circe.JsonObject
 import io.circe.generic.auto.given
+import io.circe.syntax.*
 
 /** The server that is used to test the transports. */
 class E2eServer(
@@ -44,7 +50,23 @@ class E2eServer(
         else "nobody"
       ),
   )
-  override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] = IO.pure(List(echo, progress, slow, ask))
+
+  /** The parameter `region` is mirrored into the header `Mcp-Param-Region`. */
+  private val regional = ToolFunction.native[IO](
+    info("regional"),
+    JsonObject(
+      "type" -> "object".asJson,
+      "properties" -> Json.obj(
+        "region" -> Json.obj("type" -> "string".asJson, "x-mcp-header" -> "Region".asJson)
+      ),
+    ),
+    (args, _) =>
+      IO.pure(Outcome.Complete(Tool.CallTool.Response.Success(
+        List(Content.Text(args("region").flatMap(_.asString).getOrElse("-")))
+      ))),
+  )
+  override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] =
+    IO.pure(List(echo, progress, slow, ask, regional))
 
 object E2eServer:
   case class Text(text: String)

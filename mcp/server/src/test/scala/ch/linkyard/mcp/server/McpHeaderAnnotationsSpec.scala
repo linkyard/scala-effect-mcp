@@ -91,3 +91,32 @@ class McpHeaderAnnotationsSpec extends AnyFunSpec with Matchers with EitherValue
       validate(json"""{"type": "object", "properties": {"x-mcp-header": {"type": "string"}}}""").value shouldBe Nil
     }
   }
+
+  describe("McpHeaderAnnotations.validateRequest") {
+    val schema = json"""{
+      "type": "object",
+      "properties": {
+        "flag": {"type": "boolean", "x-mcp-header": "Flag"},
+        "nested": {"type": "object", "properties": {"id": {"type": "integer", "x-mcp-header": "Id"}}}
+      }
+    }""".asObject.get
+    def check(arguments: io.circe.Json, headers: (String, String)*) =
+      McpHeaderAnnotations.validateRequest(schema, arguments.asObject.get, headers.toMap)
+
+    it("should find the value of nested parameters by their path") {
+      check(json"""{"nested": {"id": 7}}""", "mcp-param-id" -> "7").isRight shouldBe true
+      check(json"""{"nested": {"id": 7}}""", "mcp-param-id" -> "8").isLeft shouldBe true
+      check(json"""{"nested": {"id": 7}}""").isLeft shouldBe true
+    }
+
+    it("should compare booleans as lower case words") {
+      check(json"""{"flag": true}""", "mcp-param-flag" -> "true").isRight shouldBe true
+      check(json"""{"flag": true}""", "mcp-param-flag" -> "True").isLeft shouldBe true
+      check(json"""{"flag": false}""", "mcp-param-flag" -> "false").isRight shouldBe true
+    }
+
+    it("should not expect headers for absent and null values") {
+      check(json"""{}""").isRight shouldBe true
+      check(json"""{"flag": null}""").isRight shouldBe true
+    }
+  }

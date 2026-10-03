@@ -591,6 +591,77 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       }
     }
 
+    describe("Mcp-Param headers of http requests") {
+      val regionTool = ToolFunction.native[IO](
+        ToolFunction.Info("region", None, None, ToolFunction.Effect.ReadOnly, isOpenWorld = false),
+        json"""{
+          "type": "object",
+          "properties": {
+            "region": {"type": "string", "x-mcp-header": "Region"},
+            "count": {"type": "integer", "x-mcp-header": "Count"},
+            "query": {"type": "string"}
+          }
+        }""".asObject.get,
+        (_, _) => IO.pure(Outcome.Complete(Tool.CallTool.Response.Success(List(Content.Text("done"))))),
+      )
+
+      def callRegion(arguments: Json, headers: Option[Map[String, String]]): List[JsonRpc.Message] =
+        withFixture(f =>
+          f.server.setTools(regionTool) >>
+            f.handler.request(
+              request(1, "tools/call", "name" -> "region".asJson, "arguments" -> arguments),
+              headers.fold(context())(httpContext),
+            ).compile.toList
+        )
+
+      it("should accept the call if the headers match the arguments") {
+        val messages = callRegion(
+          json"""{"region": "us-west1", "count": 42, "query": "q"}""",
+          Some(Map("mcp-param-region" -> "us-west1", "mcp-param-count" -> "42.0")),
+        )
+        messages.result("content") shouldBe Some(json"""[{"type": "text", "text": "done"}]""")
+      }
+
+      it("should decode a Base64 value before it compares") {
+        val encoded = "=?base64?" + java.util.Base64.getEncoder.encodeToString("grüsse".getBytes("UTF-8")) + "?="
+        callRegion(
+          json"""{"region": "grüsse"}""",
+          Some(Map("mcp-param-region" -> encoded)),
+        ).result("resultType") shouldBe
+          Some("complete".asJson)
+      }
+
+      it("should reject a missing header with -32020") {
+        val error = callRegion(json"""{"region": "us-west1"}""", Some(Map.empty)).error
+        error.code shouldBe ErrorCode.Other(-32020)
+        error.message should include("Mcp-Param-Region")
+      }
+
+      it("should reject a header that differs from the argument with -32020") {
+        callRegion(json"""{"region": "us-west1"}""", Some(Map("mcp-param-region" -> "eu-west1"))).error.code shouldBe
+          ErrorCode.Other(-32020)
+        callRegion(
+          json"""{"region": "a", "count": 5}""",
+          Some(Map("mcp-param-region" -> "a", "mcp-param-count" -> "6")),
+        ).error.code shouldBe ErrorCode.Other(-32020)
+      }
+
+      it("should reject invalid Base64 and invalid characters with -32020") {
+        for header <- List("=?base64?SGVsbG8?=", "=?base64?SGVs!!!bG8=?=", "caf\u00e9") do
+          callRegion(json"""{"region": "Hello"}""", Some(Map("mcp-param-region" -> header))).error.code shouldBe
+            ErrorCode.Other(-32020)
+      }
+
+      it("should not expect a header for a parameter without value") {
+        callRegion(json"""{"query": "q", "count": null}""", Some(Map.empty)).result("resultType") shouldBe
+          Some("complete".asJson)
+      }
+
+      it("should not validate requests of transports without headers") {
+        callRegion(json"""{"region": "us-west1"}""", None).result("resultType") shouldBe Some("complete".asJson)
+      }
+    }
+
     describe("cancellation") {
       it("should know which request a cancellation is for") {
         val handler = withFixture(f => IO.pure(f.handler))

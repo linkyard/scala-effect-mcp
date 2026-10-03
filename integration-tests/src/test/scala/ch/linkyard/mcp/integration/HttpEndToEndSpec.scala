@@ -144,6 +144,50 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
         body.hcursor.downField("error").get[Int]("code").value shouldBe -32020
       }
 
+      it("should answer a request without the protocol version in the body with -32602") {
+        val (status, body) = withHttp() { h =>
+          h.run(h.modern(1, "tools/list", meta = json"""{"io.modelcontextprotocol/clientCapabilities": {}}"""))
+            .flatMap(r => r.as[Json].map(r.status -> _))
+        }
+        status shouldBe Status.BadRequest
+        body.hcursor.downField("error").get[Int]("code").value shouldBe -32602
+      }
+
+      it("should answer initialize of a current client like a removed method") {
+        val (status, body) = withHttp() { h =>
+          h.run(h.modern(1, "initialize", json"""{"protocolVersion": "2025-11-25", "capabilities": {}}"""))
+            .flatMap(r => r.as[Json].map(r.status -> _))
+        }
+        status shouldBe Status.NotFound
+        body.hcursor.downField("error").get[Int]("code").value shouldBe -32601
+      }
+
+      it("should validate the Mcp-Param headers of tools with x-mcp-header annotations") {
+        def call(headers: (String, String)*)(region: String) = withHttp() { h =>
+          val base = h.modern(
+            1,
+            "tools/call",
+            Json.obj("name" -> "regional".asJson, "arguments" -> Json.obj("region" -> region.asJson)),
+            Some("regional"),
+          )
+          h.run(base.putHeaders(headers.map((k, v) => Header.Raw(CIString(k), v))*))
+            .flatMap(r => r.as[Json].map(r.status -> _))
+        }
+        val (okStatus, ok) = call("Mcp-Param-Region" -> "us-west1")("us-west1")
+        okStatus shouldBe Status.Ok
+        ok.hcursor.downField("result").downField("content").focus.value shouldBe
+          json"""[{"type": "text", "text": "us-west1"}]"""
+        for (headers, region) <- List(
+            Nil -> "us-west1",
+            List("Mcp-Param-Region" -> "eu-west1") -> "us-west1",
+            List("Mcp-Param-Region" -> "=?base64?SGVsbG8?=") -> "Hello",
+          )
+        do
+          val (status, body) = call(headers*)(region)
+          status shouldBe Status.BadRequest
+          body.hcursor.downField("error").get[Int]("code").value shouldBe -32020
+      }
+
       it("should answer 400 for invalid params and 404 for unknown methods") {
         val (invalid, unknown) = withHttp() { h =>
           for

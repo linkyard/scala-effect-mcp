@@ -264,7 +264,7 @@ for
 yield ()
 ```
 
-`McpServerRoute.route(factory, config, root)` takes an optional `McpServerRouteConfig` (allowed origins, keep-alive interval) and the root path. The `SessionStore` is only used for legacy clients, which open a session with `initialize`. The routes validate the `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers and the `Origin` header (by default only `localhost` is accepted, also when it is the host of the request, which does not protect against DNS rebinding). If a browser based client sends an `Origin`, configure `McpServerRouteConfig(originAllowed = ...)`. Requests without `Origin` header are not affected.
+`McpServerRoute.route(factory, config, root)` takes an optional `McpServerRouteConfig` (allowed origins, keep-alive interval) and the root path. The `SessionStore` is only used for legacy clients, which open a session with `initialize`. The routes validate the `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers and the `Origin` header (by default only `localhost` is accepted, also when it is the host of the request, which does not protect against DNS rebinding). If a browser based client sends an `Origin`, configure `McpServerRouteConfig(originAllowed = ...)`. Requests without `Origin` header are not affected. Tools with `x-mcp-header` annotations are validated against the `Mcp-Param-*` headers of the request.
 
 ## Authentication
 

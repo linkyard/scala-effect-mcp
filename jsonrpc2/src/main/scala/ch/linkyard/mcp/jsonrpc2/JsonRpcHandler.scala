@@ -22,5 +22,14 @@ trait JsonRpcHandler[F[_]]:
 end JsonRpcHandler
 
 object JsonRpcHandler:
-  /** What is known about the message from the transport. */
-  case class Context(authentication: Authentication, connection: JsonRpcConnection.Info)
+  /** What is known about the message from the transport.
+    *
+    * @param paramHeaders
+    *   the `Mcp-Param-*` headers of an http request (lower case name and raw value), the handler validates them against
+    *   the body because only it knows the schemas of the tools. `None` for transports without headers.
+    */
+  case class Context(
+    authentication: Authentication,
+    connection: JsonRpcConnection.Info,
+    paramHeaders: Option[Map[String, String]] = None,
+  )

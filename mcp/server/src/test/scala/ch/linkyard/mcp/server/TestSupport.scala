@@ -42,6 +42,14 @@ object TestSupport:
   def context(auth: Authentication = Authentication.Anonymous): JsonRpcHandler.Context =
     JsonRpcHandler.Context(auth, JsonRpcConnection.Info.Other(Map.empty))
 
+  /** The context of an http request with these `Mcp-Param-*` headers. */
+  def httpContext(paramHeaders: Map[String, String]): JsonRpcHandler.Context =
+    JsonRpcHandler.Context(
+      Authentication.Anonymous,
+      JsonRpcConnection.Info.Http(None, None, Map.empty),
+      Some(paramHeaders),
+    )
+
   /** All messages for the request (until the response). */
   def messages(handler: JsonRpcHandler[IO], request: JsonRpc.Request, auth: Authentication = Authentication.Anonymous)
     : IO[List[JsonRpc.Message]] =

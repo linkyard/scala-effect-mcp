@@ -23,6 +23,8 @@ private[server] case class RequestEnv[F[_]](
   transport: JsonRpcConnection.Info,
   /** Sends a notification that belongs to the request (progress) */
   emit: ServerNotification => F[Unit],
+  /** The `Mcp-Param-*` headers of the http request (lower case name), None if the request has no headers */
+  paramHeaders: Option[Map[String, String]] = None,
 )
 
 /** Executes the requests of the clients, shared by the handlers of all protocol versions. */
@@ -98,7 +100,12 @@ private[server] final class ServerCore[F[_]](
               tools <- s.tools(ctx)
               tool <- tools.find(_.name == r.name)
                 .toRight(McpError.error(ErrorCode.InvalidParams, s"Tool ${r.name} not found")).liftTo[F]
-              outcome <- tool(r.arguments.getOrElse(JsonObject.empty), ctx)
+              arguments = r.arguments.getOrElse(JsonObject.empty)
+              _ <- env.paramHeaders.traverse_(headers =>
+                McpHeaderAnnotations.validateRequest(tool.argsSchema, arguments, headers)
+                  .left.map(message => McpError(McpErrorCode.HeaderMismatch, message, None)).liftTo[F]
+              )
+              outcome <- tool(arguments, ctx)
             yield outcome
           }
         case _ => unsupported

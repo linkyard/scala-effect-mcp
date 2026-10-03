@@ -11,6 +11,7 @@ import com.comcast.ip4s.Host
 import fs2.Pull
 import fs2.Stream
 import io.circe.Json
+import io.circe.JsonObject
 import io.circe.syntax.*
 import org.http4s.*
 import org.http4s.circe.*
@@ -29,7 +30,8 @@ import scala.util.Try
   * Requests of current clients are self contained and are handled by the stateless handler of the factory. The
   * transport validates the standard request headers (`MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`) against the body
   * and answers a mismatch with 400 and the JSON-RPC error -32020. The custom `Mcp-Param-*` headers are not validated
-  * because the transport does not know the schemas of the tools, this is up to the handler.
+  * here because the transport does not know the schemas of the tools, they are passed to the handler (see
+  * [[JsonRpcHandler.Context]]).
   *
   * Clients of older protocol revisions start with an `initialize` request, which opens a session (only if the factory
   * supports sessions). All further messages of such a client carry the `Mcp-Session-Id` header and are routed to the
@@ -70,7 +72,7 @@ object McpServerRoute:
       case Left(error) =>
         Logger[IO].info(s"Failed to decode a message: ${error.message}") >>
           jsonRpcError(Status.BadRequest, error.id, JsonRpc.ErrorCode.ParseError, error.message)
-      case Right(init @ JsonRpc.Request(id, "initialize", _)) =>
+      case Right(init @ JsonRpc.Request(id, "initialize", params)) if !carriesProtocolVersion(params) =>
         if factory.supportsSessions then
           Logger[IO].trace(s"Opening new session for $init") >> openSession(init, req, factory, config)
         else
@@ -111,6 +113,12 @@ object McpServerRoute:
                 "Responses are only supported in a session",
               ))
     }
+
+  /** Requests of the current protocol version carry the version in the `_meta`, `initialize` of earlier versions does
+    * not. An `initialize` of a current client is a removed method and answered by the stateless handler (404).
+    */
+  private def carriesProtocolVersion(params: Option[JsonObject]): Boolean =
+    params.flatMap(_("_meta")).flatMap(_.asObject).exists(_.contains(ProtocolVersionMeta))
 
   private def stateless(
     request: JsonRpc.Request,
@@ -293,11 +301,11 @@ object McpServerRoute:
       .flatMap(_(ProtocolVersionMeta)).flatMap(_.asString)
     for
       version <- required("MCP-Protocol-Version")
+      // a body without a version is malformed, the handler answers it with -32602
       _ <- Either.cond(
-        bodyVersion.contains(version),
+        bodyVersion.forall(_ == version),
         (),
-        s"Header mismatch: MCP-Protocol-Version header '$version' does not match the protocol version in the body" +
-          bodyVersion.fold(" (missing)")(v => s" '$v'"),
+        s"Header mismatch: MCP-Protocol-Version header '$version' does not match the protocol version in the body '${bodyVersion.getOrElse("")}'",
       )
       method <- required("Mcp-Method")
       _ <- Either.cond(
@@ -325,10 +333,10 @@ object McpServerRoute:
     val prefix = "=?base64?"
     val suffix = "?="
     if value.length >= prefix.length + suffix.length && value.startsWith(prefix) && value.endsWith(suffix) then
-      Try(new String(
-        Base64.getDecoder.decode(value.substring(prefix.length, value.length - suffix.length)),
-        StandardCharsets.UTF_8,
-      )).toEither.left.map(_ => s"Header mismatch: invalid Base64 value in the Mcp-Name header")
+      val encoded = value.substring(prefix.length, value.length - suffix.length)
+      Try(new String(Base64.getDecoder.decode(encoded), StandardCharsets.UTF_8)).toEither
+        .filterOrElse(_ => encoded.length % 4 == 0, new IllegalArgumentException("missing padding")) // not lenient
+        .left.map(_ => s"Header mismatch: invalid Base64 value in the Mcp-Name header")
     else Right(value)
 
   // origin validation
@@ -364,7 +372,12 @@ object McpServerRoute:
     )
 
   private def context(req: Request[IO], info: JsonRpcConnection.Info): JsonRpcHandler.Context =
-    JsonRpcHandler.Context(req.authentication, info)
+    JsonRpcHandler.Context(req.authentication, info, Some(paramHeaders(req)))
+
+  private def paramHeaders(req: Request[IO]): Map[String, String] =
+    req.headers.headers.collect {
+      case h if h.name.toString.toLowerCase.startsWith("mcp-param-") => h.name.toString.toLowerCase -> h.value
+    }.toMap
 
   private def describe(info: JsonRpcConnection.Info.Http): String = (info.client, info.server) match
     case (Some(clientIp), Some(host, _)) => s"$clientIp to $host"
