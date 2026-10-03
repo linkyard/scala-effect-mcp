@@ -79,14 +79,10 @@ private[server] final class ServerCore[F[_]](
     case r: Tool.ListTools =>
       server match
         case s: ToolProvider[F] =>
-          s.tools(context(r._meta, env)).map { tools =>
-            Tool.ListTools.Response(
-              tools.sortBy(_.name).map(toProtocol),
-              None,
-              s.toolsCache.ttlMs,
-              s.toolsCache.scope,
-            )
-          }
+          for
+            tools <- s.tools(context(r._meta, env))
+            valid <- tools.sortBy(_.name).filterA(withValidHeaders)
+          yield Tool.ListTools.Response(valid.map(toProtocol), None, s.toolsCache.ttlMs, s.toolsCache.scope)
         case _ => unsupported
     case r: CallTool =>
       server match
@@ -166,6 +162,13 @@ private[server] final class ServerCore[F[_]](
             case _ => Completion(Nil).pure[F]
       completion.map(Completion.Complete.Response(_))
     case _: Subscriptions.Listen => unsupported // streamed by the handlers, see listen
+
+  /** Tools with invalid `x-mcp-header` annotations are not listed (clients would reject them), the error is logged. */
+  private def withValidHeaders(tool: ToolFunction[F]): F[Boolean] =
+    McpHeaderAnnotations.validate(tool.argsSchema) match
+      case Right(_) => true.pure[F]
+      case Left(reason) =>
+        logError(IllegalStateException(s"The tool ${tool.name} is not listed: $reason")).as(false)
 
   private def toProtocol(tool: ToolFunction[F]): Tool = Tool(
     name = tool.name,

@@ -148,6 +148,23 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
         result("resultType") shouldBe Some("complete".asJson)
       }
 
+      it("should not list tools with invalid header annotations and log them") {
+        val invalid = ToolFunction.native[IO](
+          ToolFunction.Info("invalid", None, None, ToolFunction.Effect.ReadOnly, isOpenWorld = false),
+          json"""{"type": "object", "properties": {"n": {"type": "number", "x-mcp-header": "N"}}}""".asObject.get,
+          (_, _) => IO.pure(Outcome.Complete(Tool.CallTool.Response.Success(Nil))),
+        )
+        val (names, errors) = withFixture(f =>
+          for
+            _ <- f.server.setTools(invalid)
+            response <- call(f, 1, "tools/list")
+            errors <- f.errors.get
+          yield response.result.asJson.as[Tool.ListTools.Response].value.tools.map(_.name) -> errors
+        )
+        names shouldBe empty
+        errors.map(_.getMessage).head should include("invalid")
+      }
+
       it("should list tools depending on the authentication") {
         val names = (auth: Authentication) =>
           withFixture(f => messages(f.handler, request(1, "tools/list"), auth)).result.asJson
