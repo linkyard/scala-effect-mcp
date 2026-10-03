@@ -643,7 +643,7 @@ class McpServerRouteSpec extends AnyFunSpec with Matchers:
     }
 
     it("does not open a session for the initialize of a current client (a removed method)") {
-      withSessions() { (f, handler) =>
+      withSessions() { (f, _) =>
         for
           res <- run(f, post(requestBody("initialize"), modernHeaders("initialize")*))
           infos <- f.factory.connections.get
