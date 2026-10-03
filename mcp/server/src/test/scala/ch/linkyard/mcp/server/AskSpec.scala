@@ -2,7 +2,6 @@ package ch.linkyard.mcp.server
 
 import cats.effect.IO
 import cats.effect.Ref
-import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpcHandler
 import ch.linkyard.mcp.protocol.*
@@ -54,7 +53,9 @@ class AskSpec extends AnyFunSpec with Matchers with OptionValues with EitherValu
     private val declined = ToolFunction.interactiveText[IO, Nothing](
       toolInfo.copy(name = "declined"),
       (_, _, ask) =>
-        ask.elicit("name", "Name?", ElicitationField.Text("name", true)).map(r => if r.action == ElicitAction.Accept then "ok" else "no"),
+        ask.elicit("name", "Name?", ElicitationField.Text("name", true)).map(r =>
+          if r.action == ElicitAction.Accept then "ok" else "no"
+        ),
     )
     override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] =
       IO.pure(List(sequential, batched, url, structured, declined))
@@ -62,12 +63,15 @@ class AskSpec extends AnyFunSpec with Matchers with OptionValues with EitherValu
   private case class Json2(value: String)
 
   private def field(result: ElicitResult, name: String): String =
-    result.content.flatMap(_(name)).flatMap(_.asString).orElse(result.content.flatMap(_(name)).map(_.noSpaces)).getOrElse("?")
+    result.content.flatMap(
+      _(name)
+    ).flatMap(_.asString).orElse(result.content.flatMap(_(name)).map(_.noSpaces)).getOrElse("?")
 
   private def withHandler[A](test: (JsonRpcHandler[IO], Ref[IO, Int]) => IO[A]): A =
     (for
       runs <- Ref.of[IO, Int](0)
-      handler = InterviewServer(runs).handlerFactory(McpServerConfig(supportLegacyClients = false), _ => IO.unit).stateless
+      handler =
+        InterviewServer(runs).handlerFactory(McpServerConfig(supportLegacyClients = false), _ => IO.unit).stateless
       result <- test(handler, runs)
     yield result).run
 
@@ -111,7 +115,9 @@ class AskSpec extends AnyFunSpec with Matchers with OptionValues with EitherValu
       val params = result("inputRequests").value.hcursor.downField("name").downField("params")
       params.get[String]("message").value shouldBe "Name?"
       params.downField("requestedSchema").get[List[String]]("required").value shouldBe List("name")
-      params.downField("requestedSchema").downField("properties").downField("name").get[String]("type").value shouldBe "string"
+      params.downField(
+        "requestedSchema"
+      ).downField("properties").downField("name").get[String]("type").value shouldBe "string"
     }
 
     it("should ask several questions in one round") {
@@ -149,7 +155,8 @@ class AskSpec extends AnyFunSpec with Matchers with OptionValues with EitherValu
 
     it("should ask to open a url") {
       val urlCapable = clientMeta(capabilities = json"""{"elicitation": {"url": {}}}""")
-      val result = withHandler((h, _) => messages(h, requestWithMeta(1, "tools/call", urlCapable, "name" -> "url".asJson))).result
+      val result =
+        withHandler((h, _) => messages(h, requestWithMeta(1, "tools/call", urlCapable, "name" -> "url".asJson))).result
       val params = result("inputRequests").value.hcursor.downField("login").downField("params")
       params.get[String]("mode").value shouldBe "url"
       params.get[String]("url").value shouldBe "https://example.com/login"

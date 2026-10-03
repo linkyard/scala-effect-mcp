@@ -1,6 +1,5 @@
 package ch.linkyard.mcp.jsonrpc2.transport.http4s
 
-import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.effect.Resource
 import cats.implicits.*

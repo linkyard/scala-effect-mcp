@@ -57,7 +57,7 @@ object JsonRpcServer:
 
     val input = connection.in.evalMap { envelope =>
       envelope.message match
-        case request: JsonRpc.Request => startRequest(request, contextOf(envelope))
+        case request: JsonRpc.Request           => startRequest(request, contextOf(envelope))
         case notification: JsonRpc.Notification =>
           handler.cancelledRequest(notification) match
             case Some(id) => cancel(id)

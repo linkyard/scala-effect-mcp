@@ -53,7 +53,8 @@ class RequestInfoSpec extends AnyFunSpec with Matchers with EitherValues:
     it("should know the elicitation modes") {
       ClientCapabilities().supportsFormElicitation shouldBe false
       ClientCapabilities(elicitation = Some(ClientCapabilities.Elicitation())).supportsFormElicitation shouldBe true
-      val urlOnly = ClientCapabilities(elicitation = Some(ClientCapabilities.Elicitation(url = Some(io.circe.JsonObject.empty))))
+      val urlOnly =
+        ClientCapabilities(elicitation = Some(ClientCapabilities.Elicitation(url = Some(io.circe.JsonObject.empty))))
       urlOnly.supportsFormElicitation shouldBe false
       urlOnly.supportsUrlElicitation shouldBe true
     }

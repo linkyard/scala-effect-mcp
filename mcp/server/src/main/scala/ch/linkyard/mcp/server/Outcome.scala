@@ -9,8 +9,8 @@ enum Outcome[+A]:
   /** The request is done. */
   case Complete(value: A)
 
-  /** The client is asked to answer the requests and to retry the request with the answers (and the `state`). Without
-    * a `state` the handler only sees the answers on the retry.
+  /** The client is asked to answer the requests and to retry the request with the answers (and the `state`). Without a
+    * `state` the handler only sees the answers on the retry.
     */
   case InputRequired(requests: InputRequests, state: Option[String] = None)
 
@@ -20,7 +20,7 @@ enum Outcome[+A]:
     case complete                   => complete
 
   def map[B](f: A => B): Outcome[B] = this match
-    case Complete(value)                  => Complete(f(value))
+    case Complete(value)                => Complete(f(value))
     case InputRequired(requests, state) => InputRequired(requests, state)
 
 object Outcome:

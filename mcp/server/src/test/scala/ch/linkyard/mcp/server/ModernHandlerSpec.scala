@@ -2,13 +2,11 @@ package ch.linkyard.mcp.server
 
 import cats.effect.IO
 import cats.effect.Ref
-import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.jsonrpc2.JsonRpcHandler
 import ch.linkyard.mcp.protocol.*
-import ch.linkyard.mcp.protocol.McpCodec.fromJsonRpc
 import ch.linkyard.mcp.server.McpServer.*
 import ch.linkyard.mcp.server.TestSupport.*
 import io.circe.Json
@@ -25,7 +23,10 @@ import scala.concurrent.duration.DurationInt
 class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with EitherValues:
   private case class Fixture(server: FixtureServer, handler: JsonRpcHandler[IO], errors: Ref[IO, List[Throwable]])
 
-  private def withFixture[A](test: Fixture => IO[A], config: McpServerConfig = McpServerConfig(supportLegacyClients = false))
+  private def withFixture[A](
+    test: Fixture => IO[A],
+    config: McpServerConfig = McpServerConfig(supportLegacyClients = false),
+  )
     : A =
     (for
       server <- FixtureServer.create
@@ -183,7 +184,9 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
 
     describe("tools/call") {
       it("should call a text tool") {
-        val result = withFixture(f => call(f, 1, "tools/call", "name" -> "echo".asJson, "arguments" -> json"""{"text": "hi"}""")).result
+        val result = withFixture(f =>
+          call(f, 1, "tools/call", "name" -> "echo".asJson, "arguments" -> json"""{"text": "hi"}""")
+        ).result
         result.asJson.as[Tool.CallTool.Response].value shouldBe a[Tool.CallTool.Response.Success]
         result("content") shouldBe Some(json"""[{"type": "text", "text": "hi"}]""")
         result("resultType") shouldBe Some("complete".asJson)
@@ -250,7 +253,8 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       }
 
       it("should not send progress when the client did not ask for it") {
-        val all = withFixture(f => call(f, 1, "tools/call", "name" -> "progress".asJson, "arguments" -> json"""{"text": "x"}"""))
+        val all =
+          withFixture(f => call(f, 1, "tools/call", "name" -> "progress".asJson, "arguments" -> json"""{"text": "x"}"""))
         all.notifications shouldBe empty
       }
 
@@ -275,7 +279,10 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should cancel the tool when the stream of the request is cancelled") {
         val cancelled = withFixture(f =>
           for
-            fiber <- messages(f.handler, request(1, "tools/call", "name" -> "slow".asJson, "arguments" -> json"""{"text": "x"}""")).start
+            fiber <- messages(
+              f.handler,
+              request(1, "tools/call", "name" -> "slow".asJson, "arguments" -> json"""{"text": "x"}"""),
+            ).start
             _ <- f.server.started.get
             _ <- fiber.cancel
             _ <- f.server.cancelled.get.timeout(5.seconds)
@@ -292,7 +299,9 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should ask for input and protect the state") {
         val result = withFixture(f => ask(f, 1)).result
         result("resultType") shouldBe Some("input_required".asJson)
-        result("inputRequests").value.hcursor.downField("name").downField("method").as[String].value shouldBe "elicitation/create"
+        result(
+          "inputRequests"
+        ).value.hcursor.downField("name").downField("method").as[String].value shouldBe "elicitation/create"
         val state = result("requestState").value.asString.value
         state should not include "asked" // not readable
         state should include(".")
@@ -361,7 +370,8 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should reject a state that was created for another user") {
         val error = withFixture(f =>
           for
-            first <- messages(f.handler, request(1, "tools/call", "name" -> "ask".asJson), Authentication.BearerToken("a"))
+            first <-
+              messages(f.handler, request(1, "tools/call", "name" -> "ask".asJson), Authentication.BearerToken("a"))
             second <- messages(
               f.handler,
               request(2, "tools/call", "name" -> "ask".asJson, "requestState" -> first.result("requestState").value),
@@ -375,7 +385,8 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should accept the state for the same user") {
         val result = withFixture(f =>
           for
-            first <- messages(f.handler, request(1, "tools/call", "name" -> "ask".asJson), Authentication.BearerToken("a"))
+            first <-
+              messages(f.handler, request(1, "tools/call", "name" -> "ask".asJson), Authentication.BearerToken("a"))
             second <- messages(
               f.handler,
               request(2, "tools/call", "name" -> "ask".asJson, "requestState" -> first.result("requestState").value),
@@ -504,12 +515,17 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
 
       it("should acknowledge what the server accepts first") {
         val first = withFixture(f =>
-          listen(f, json"""{"toolsListChanged": true, "promptsListChanged": true, "resourceSubscriptions": ["test://a"]}""")
+          listen(
+            f,
+            json"""{"toolsListChanged": true, "promptsListChanged": true, "resourceSubscriptions": ["test://a"]}""",
+          )
             .take(1).compile.toList
         )
         val ack = first.head.asInstanceOf[JsonRpc.Notification]
         ack.method shouldBe "notifications/subscriptions/acknowledged"
-        ack.params.value("notifications") shouldBe Some(json"""{"toolsListChanged": true, "resourceSubscriptions": ["test://a"]}""")
+        ack.params.value("notifications") shouldBe Some(
+          json"""{"toolsListChanged": true, "resourceSubscriptions": ["test://a"]}"""
+        )
         ack.params.value("_meta") shouldBe Some(json"""{"io.modelcontextprotocol/subscriptionId": 7}""")
       }
 
@@ -552,9 +568,9 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should end the subscription at once when the server accepts nothing") {
         val received = withFixture(f => listen(f, json"""{"promptsListChanged": true}""").compile.toList)
         received.map {
-          case n: JsonRpc.Notification => n.method
+          case n: JsonRpc.Notification     => n.method
           case _: JsonRpc.Response.Success => "result"
-          case _ => "other"
+          case _                           => "other"
         } shouldBe List("notifications/subscriptions/acknowledged", "result")
         received.head.asInstanceOf[JsonRpc.Notification].params.value("notifications") shouldBe Some(json"{}")
         val last = received.last.asInstanceOf[JsonRpc.Response.Success].result
@@ -578,7 +594,10 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
     describe("cancellation") {
       it("should know which request a cancellation is for") {
         val handler = withFixture(f => IO.pure(f.handler))
-        handler.cancelledRequest(JsonRpc.Notification("notifications/cancelled", Some(JsonObject("requestId" -> 5.asJson)))) shouldBe
+        handler.cancelledRequest(JsonRpc.Notification(
+          "notifications/cancelled",
+          Some(JsonObject("requestId" -> 5.asJson)),
+        )) shouldBe
           Some(JsonRpc.Id.IdInt(5))
         handler.cancelledRequest(JsonRpc.Notification("notifications/other", None)) shouldBe None
         handler.cancelledRequest(JsonRpc.Notification("notifications/cancelled", None)) shouldBe None

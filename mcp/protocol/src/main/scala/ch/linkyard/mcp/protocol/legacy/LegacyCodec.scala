@@ -9,8 +9,8 @@ import io.circe.Decoder
 import io.circe.JsonObject
 import io.circe.syntax.*
 
-/** Reads the messages of legacy clients and writes the messages for them: the 2026-07-28 messages are converted to
-  * what the earlier versions expect.
+/** Reads the messages of legacy clients and writes the messages for them: the 2026-07-28 messages are converted to what
+  * the earlier versions expect.
   */
 object LegacyCodec:
   object Method:
@@ -43,7 +43,7 @@ object LegacyCodec:
 
   def decodeNotification(notification: JsonRpc.Notification): Either[DecodeError, LegacyNotification] =
     notification.method match
-      case Method.Initialized => Right(LegacyNotification.Initialized)
+      case Method.Initialized           => Right(LegacyNotification.Initialized)
       case NotificationMethod.Cancelled =>
         notification.params.getOrElse(JsonObject.empty).asJson.as[Cancelled]
           .map(LegacyNotification.Cancelled.apply).left.map(DecodeError.InvalidParams.apply)
@@ -53,7 +53,8 @@ object LegacyCodec:
   def encodeInitializeResult(id: RequestId, result: InitializeResult): JsonRpc.Response.Success =
     JsonRpc.Response.Success(id.toJsonRpc, downgrade(result.protocolVersion, result.asJsonObject))
 
-  def encodeEmptyResult(id: RequestId): JsonRpc.Response.Success = JsonRpc.Response.Success(id.toJsonRpc, JsonObject.empty)
+  def encodeEmptyResult(id: RequestId): JsonRpc.Response.Success =
+    JsonRpc.Response.Success(id.toJsonRpc, JsonObject.empty)
 
   /** The result of a request, for a client that speaks `version`. */
   def encodeResponse(version: String, id: RequestId, response: ServerResponse): JsonRpc.Response.Success =

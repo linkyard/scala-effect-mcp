@@ -2,7 +2,6 @@ package ch.linkyard.mcp.server
 
 import cats.effect.IO
 import cats.effect.kernel.Deferred
-import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
@@ -177,7 +176,9 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should reject unknown methods and the methods of the new version") {
         initialized()((_, h) => messages(h, plain(2, "does/not/exist"))).error.code shouldBe ErrorCode.MethodNotFound
         initialized()((_, h) => messages(h, plain(2, "server/discover"))).error.code shouldBe ErrorCode.MethodNotFound
-        initialized()((_, h) => messages(h, plain(2, "subscriptions/listen", "notifications" -> json"{}"))).error.code shouldBe
+        initialized()((_, h) =>
+          messages(h, plain(2, "subscriptions/listen", "notifications" -> json"{}"))
+        ).error.code shouldBe
           ErrorCode.MethodNotFound
       }
 
@@ -230,7 +231,8 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       }
 
       it("should not be in the server info of 2025-06-18") {
-        val info = withSession((_, h) => messages(h, initializeRequest(version = "2025-06-18"))).result("serverInfo").value
+        val info =
+          withSession((_, h) => messages(h, initializeRequest(version = "2025-06-18"))).result("serverInfo").value
         info.asObject.value.contains("icons") shouldBe false
       }
     }
@@ -241,7 +243,9 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
         val ask = all.head.asInstanceOf[JsonRpc.Request]
         ask.method shouldBe "elicitation/create"
         ask.params.value("message") shouldBe Some("Who are you?".asJson)
-        ask.params.value("requestedSchema").value.hcursor.downField("required").as[List[String]].value shouldBe List("name")
+        ask.params.value("requestedSchema").value.hcursor.downField("required").as[List[String]].value shouldBe List(
+          "name"
+        )
         ask.params.value.contains("mode") shouldBe false
         all.result("content") shouldBe Some(json"""[{"type": "text", "text": "hello Ada (asked)"}]""")
         all.result.contains("resultType") shouldBe false
@@ -307,8 +311,9 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should cancel a request when the client cancels it") {
         val result = initialized()((server, h) =>
           for
-            fiber <- h.request(plain(2, "tools/call", "name" -> "slow".asJson, "arguments" -> json"""{"text": "x"}"""), context())
-              .compile.toList.start
+            fiber <-
+              h.request(plain(2, "tools/call", "name" -> "slow".asJson, "arguments" -> json"""{"text": "x"}"""), context())
+                .compile.toList.start
             _ <- server.started.get
             _ <- h.notification(
               JsonRpc.Notification("notifications/cancelled", Some(JsonObject("requestId" -> 2.asJson))),
@@ -368,7 +373,9 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       }
 
       it("should reject subscriptions before the handshake") {
-        withSession((_, h) => messages(h, plain(1, "resources/subscribe", "uri" -> "test://a".asJson))).error.code shouldBe
+        withSession((_, h) =>
+          messages(h, plain(1, "resources/subscribe", "uri" -> "test://a".asJson))
+        ).error.code shouldBe
           ErrorCode.InvalidRequest
       }
 
@@ -402,7 +409,8 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       }
 
       it("should drive the input of a legacy client") {
-        val all = initialized(info = stdio)((_, h) => drive(h, plain(2, "tools/call", "name" -> "ask".asJson), accept("Bo")))
+        val all =
+          initialized(info = stdio)((_, h) => drive(h, plain(2, "tools/call", "name" -> "ask".asJson), accept("Bo")))
         all.result("content").value.noSpaces should include("hello Bo")
       }
 
@@ -426,7 +434,10 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
 
       it("should know the cancellation of both generations") {
         val handler = withSession((_, h) => IO.pure(h), info = stdio)
-        handler.cancelledRequest(JsonRpc.Notification("notifications/cancelled", Some(JsonObject("requestId" -> 4.asJson)))) shouldBe
+        handler.cancelledRequest(JsonRpc.Notification(
+          "notifications/cancelled",
+          Some(JsonObject("requestId" -> 4.asJson)),
+        )) shouldBe
           Some(JsonRpc.Id.IdInt(4))
       }
     }
@@ -450,7 +461,10 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       }
 
       it("should list the versions in discover and in the unsupported version error") {
-        val discover = withSession((_, h) => messages(h, request(1, "server/discover")), info = JsonRpcConnection.Info.Stdio(Map.empty)).result
+        val discover = withSession(
+          (_, h) => messages(h, request(1, "server/discover")),
+          info = JsonRpcConnection.Info.Stdio(Map.empty),
+        ).result
         discover("supportedVersions") shouldBe Some(json"""["2026-07-28", "2025-11-25", "2025-06-18"]""")
         val error = withSession(
           (_, h) => messages(h, requestWithMeta(1, "tools/list", clientMeta(version = "1900-01-01"))),

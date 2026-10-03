@@ -39,7 +39,8 @@ class E2eServer(
     info("ask"),
     (in, _, ask: Ask[IO]) =>
       ask.elicit("name", s"Name for ${in.text}?", ElicitationField.Text("name", true)).map(answer =>
-        if answer.action == ElicitAction.Accept then s"hello ${answer.content.flatMap(_("name")).flatMap(_.asString).getOrElse("?")}"
+        if answer.action == ElicitAction.Accept then
+          s"hello ${answer.content.flatMap(_("name")).flatMap(_.asString).getOrElse("?")}"
         else "nobody"
       ),
   )

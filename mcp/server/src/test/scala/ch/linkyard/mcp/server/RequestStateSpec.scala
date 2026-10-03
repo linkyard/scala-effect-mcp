@@ -36,7 +36,11 @@ class RequestStateSpec extends AnyFunSpec with Matchers with EitherValues:
       protector.verify(token, binding.copy(principal = "other"), now).isLeft shouldBe true
       protector.verify(token, binding.copy(method = "prompts/get"), now).isLeft shouldBe true
       protector.verify(token, binding.copy(target = "other"), now).isLeft shouldBe true
-      protector.verify(token, binding.copy(argumentsHash = StateBinding.hash(json"""{"a": 2}""")), now).isLeft shouldBe true
+      protector.verify(
+        token,
+        binding.copy(argumentsHash = StateBinding.hash(json"""{"a": 2}""")),
+        now,
+      ).isLeft shouldBe true
     }
 
     it("should reject a state that was changed") {

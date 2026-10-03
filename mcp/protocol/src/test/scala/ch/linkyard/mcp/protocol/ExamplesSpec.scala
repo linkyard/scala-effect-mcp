@@ -58,7 +58,8 @@ class ExamplesSpec extends AnyFunSpec with Matchers:
       examples(dir).foreach { (name, json) =>
         it(s"should decode and encode $name") {
           val rpc = json.as[JsonRpc.Notification].fold(e => fail(e.getMessage), identity)
-          val params = rpc.params.getOrElse(io.circe.JsonObject.empty).asJson.as[A].fold(e => fail(e.getMessage), identity)
+          val params =
+            rpc.params.getOrElse(io.circe.JsonObject.empty).asJson.as[A].fold(e => fail(e.getMessage), identity)
           McpCodec.encodeNotification(encode(params)).asJson shouldBe json
         }
       }

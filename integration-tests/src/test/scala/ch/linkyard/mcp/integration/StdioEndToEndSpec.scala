@@ -57,7 +57,8 @@ class StdioEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with 
       in <- Queue.unbounded[IO, Option[String]]
       out <- Queue.unbounded[IO, String]
       input = Stream.fromQueueNoneTerminated(in).through(text.utf8.encode[IO])
-      output: Pipe[IO, Byte, Unit] = _.through(text.utf8.decode).through(text.lines).filter(_.nonEmpty).evalMap(out.offer)
+      output: Pipe[IO, Byte, Unit] =
+        _.through(text.utf8.decode).through(text.lines).filter(_.nonEmpty).evalMap(out.offer)
       connection = LineBasedJsonRpcConnection[IO](input, output, JsonRpcConnection.Info.Stdio(Map.empty))
       running <- server.run(connection, e => IO.println(s"server error: $e"), config).start
       result <- test(Client(in, out, server, running))
@@ -78,7 +79,9 @@ class StdioEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with 
         }
         discover.hcursor.downField("result").get[List[String]]("supportedVersions").value shouldBe
           List("2026-07-28", "2025-11-25", "2025-06-18")
-        tools.hcursor.downField("result").downField("tools").as[List[Json]].value.map(_.hcursor.get[String]("name").value) shouldBe
+        tools.hcursor.downField(
+          "result"
+        ).downField("tools").as[List[Json]].value.map(_.hcursor.get[String]("name").value) shouldBe
           List("ask", "echo", "progress", "slow")
         called.hcursor.downField("result").downField("content").focus.value shouldBe
           json"""[{"type": "text", "text": "hi"}]"""
@@ -121,10 +124,14 @@ class StdioEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with 
             invalid <- c.receive
             _ <- c.request(2, "nope")
             unknown <- c.receive
-            _ <- c.request(3, "tools/list", meta = Some(json"""{
+            _ <- c.request(
+              3,
+              "tools/list",
+              meta = Some(json"""{
               "io.modelcontextprotocol/protocolVersion": "1999-01-01",
               "io.modelcontextprotocol/clientCapabilities": {}
-            }"""))
+            }"""),
+            )
             version <- c.receive
           yield (invalid, unknown, version)
         }
@@ -169,7 +176,9 @@ class StdioEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with 
         }
         messages.map(_.hcursor.get[String]("method").value) shouldBe
           List("notifications/subscriptions/acknowledged", "notifications/tools/list_changed")
-        messages.last.hcursor.downField("params").downField("_meta").get[Int]("io.modelcontextprotocol/subscriptionId").value shouldBe 1
+        messages.last.hcursor.downField(
+          "params"
+        ).downField("_meta").get[Int]("io.modelcontextprotocol/subscriptionId").value shouldBe 1
       }
     }
 

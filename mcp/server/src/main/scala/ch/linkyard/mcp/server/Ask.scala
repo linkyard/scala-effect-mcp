@@ -18,10 +18,10 @@ import scala.util.control.NoStackTrace
   *   ...
   * }}}
   *
-  * A request that needs input is answered with an input required result and retried by the client with the answers.
-  * The function therefore runs again from the start on every retry, the answers that are already known are returned
-  * immediately and the first question without an answer ends the run. Side effects before a question are repeated,
-  * ask first and act afterwards.
+  * A request that needs input is answered with an input required result and retried by the client with the answers. The
+  * function therefore runs again from the start on every retry, the answers that are already known are returned
+  * immediately and the first question without an answer ends the run. Side effects before a question are repeated, ask
+  * first and act afterwards.
   */
 trait Ask[F[_]]:
   /** Asks the user to fill in a form. */

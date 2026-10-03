@@ -59,7 +59,11 @@ private[server] final class ServerCore[F[_]](
       Discover.Response(supportedVersions, capabilities, instructions, ttlMs = 0, cacheScope = CacheScope.Public)
     )
 
-  def context(requestMeta: Meta, env: RequestEnv[F], inputContext: InputContext = InputContext.empty): RequestContext[F] =
+  def context(
+    requestMeta: Meta,
+    env: RequestEnv[F],
+    inputContext: InputContext = InputContext.empty,
+  ): RequestContext[F] =
     new RequestContext[F]:
       override val client: ClientInfo = env.client
       override val authentication: Authentication = env.authentication
@@ -75,7 +79,7 @@ private[server] final class ServerCore[F[_]](
     McpError.raise[F](ErrorCode.MethodNotFound, "Capability not supported by this server").widen
 
   def execute(request: ClientRequest, env: RequestEnv[F]): F[ServerResponse] = request match
-    case r: Discover => unsupported // answered by the handler that knows the supported versions
+    case r: Discover       => unsupported // answered by the handler that knows the supported versions
     case r: Tool.ListTools =>
       server match
         case s: ToolProvider[F] =>
@@ -102,7 +106,12 @@ private[server] final class ServerCore[F[_]](
       server match
         case s: PromptProvider[F] =>
           s.prompts(context(r._meta, env)).map(prompts =>
-            Prompts.ListPrompts.Response(prompts.map(_.prompt).sortBy(_.name), None, s.promptsCache.ttlMs, s.promptsCache.scope)
+            Prompts.ListPrompts.Response(
+              prompts.map(_.prompt).sortBy(_.name),
+              None,
+              s.promptsCache.ttlMs,
+              s.promptsCache.scope,
+            )
           )
         case _ => unsupported
     case r: GetPrompt =>
@@ -166,7 +175,7 @@ private[server] final class ServerCore[F[_]](
   /** Tools with invalid `x-mcp-header` annotations are not listed (clients would reject them), the error is logged. */
   private def withValidHeaders(tool: ToolFunction[F]): F[Boolean] =
     McpHeaderAnnotations.validate(tool.argsSchema) match
-      case Right(_) => true.pure[F]
+      case Right(_)     => true.pure[F]
       case Left(reason) =>
         logError(IllegalStateException(s"The tool ${tool.name} is not listed: $reason")).as(false)
 
@@ -205,7 +214,7 @@ private[server] final class ServerCore[F[_]](
     env: RequestEnv[F],
   )(handler: InputContext => F[Outcome[A]]): F[ServerResponse] =
     val input = requestState match
-      case None => InputContext(responses.getOrElse(Map.empty), None).pure[F]
+      case None        => InputContext(responses.getOrElse(Map.empty), None).pure[F]
       case Some(token) =>
         F.realTimeInstant.flatMap(now =>
           protector.verify(token, binding, now)
@@ -214,7 +223,7 @@ private[server] final class ServerCore[F[_]](
             .liftTo[F]
         )
     input.flatMap(handler).flatMap {
-      case Outcome.Complete(value) => (value: ServerResponse).pure[F]
+      case Outcome.Complete(value)                => (value: ServerResponse).pure[F]
       case Outcome.InputRequired(requests, state) =>
         for
           _ <- checkCapabilities(requests, env.client.capabilities).liftTo[F]
@@ -241,12 +250,14 @@ private[server] final class ServerCore[F[_]](
         McpErrorCode.MissingRequiredClientCapability,
         "The client does not support the requested input",
         Some(MissingRequiredClientCapabilityData(
-          required.copy(elicitation = Some(
-            ClientCapabilities.Elicitation(
-              form = missing.flatMap(_.elicitation).flatMap(_.form).headOption,
-              url = missing.flatMap(_.elicitation).flatMap(_.url).headOption,
+          required.copy(elicitation =
+            Some(
+              ClientCapabilities.Elicitation(
+                form = missing.flatMap(_.elicitation).flatMap(_.form).headOption,
+                url = missing.flatMap(_.elicitation).flatMap(_.url).headOption,
+              )
             )
-          ))
+          )
         ).asJson),
       )
     )
@@ -276,7 +287,10 @@ private[server] final class ServerCore[F[_]](
       case _ => None
 
   /** The notifications for a subscription: what the server accepted and the stream of the notifications */
-  def listen(filter: SubscriptionFilter, context: RequestContext[F]): (SubscriptionFilter, fs2.Stream[F, ServerNotification]) =
+  def listen(
+    filter: SubscriptionFilter,
+    context: RequestContext[F],
+  ): (SubscriptionFilter, fs2.Stream[F, ServerNotification]) =
     val (accepted, changeStream) = changes(filter)
     val uris = filter.resourceSubscriptions.getOrElse(Nil).distinct
     val updates = uris.flatMap(uri => resourceUpdates(uri, context).map(uri -> _))

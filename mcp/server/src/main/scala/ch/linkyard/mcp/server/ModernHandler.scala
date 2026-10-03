@@ -28,10 +28,11 @@ private[server] final class ModernHandler[F[_]](core: ServerCore[F], supportedVe
 
     McpCodec.decodeRequest(rpc) match
       case Left(DecodeError.UnknownMethod(method)) => failure(ErrorCode.MethodNotFound, s"Method not found: $method")
-      case Left(DecodeError.InvalidParams(error)) => failure(ErrorCode.InvalidParams, s"Invalid params: ${error.message}")
+      case Left(DecodeError.InvalidParams(error))  =>
+        failure(ErrorCode.InvalidParams, s"Invalid params: ${error.message}")
       case Right(request) =>
         RequestInfo.fromMeta(request.meta) match
-          case Left(message) => failure(ErrorCode.InvalidParams, message)
+          case Left(message)                                                => failure(ErrorCode.InvalidParams, message)
           case Right(info) if info.protocolVersion != ModernHandler.Version =>
             failure(
               McpErrorCode.UnsupportedProtocolVersion,

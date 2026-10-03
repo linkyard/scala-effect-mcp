@@ -24,9 +24,8 @@ import java.util.UUID
 /** What a legacy client told in the handshake. */
 private[server] case class LegacySession(version: String, client: ClientInfo)
 
-/** Serves a client of an earlier protocol version (2025-06-18, 2025-11-25) that starts with the `initialize`
-  * handshake. The state of the connection (what the client told, the subscriptions) lives here, the server itself
-  * stays stateless.
+/** Serves a client of an earlier protocol version (2025-06-18, 2025-11-25) that starts with the `initialize` handshake.
+  * The state of the connection (what the client told, the subscriptions) lives here, the server itself stays stateless.
   *
   * Input requests of the server are sent to the client as requests (`elicitation/create`) while the original request is
   * pending, and the original request is retried with the answers, like a client of 2026-07-28 would do.
@@ -53,17 +52,20 @@ private[server] final class LegacyConnection[F[_]] private (
 
     LegacyCodec.decodeRequest(rpc) match
       case Left(DecodeError.UnknownMethod(method)) => failure(ErrorCode.MethodNotFound, s"Method not found: $method")
-      case Left(DecodeError.InvalidParams(error)) => failure(ErrorCode.InvalidParams, s"Invalid params: ${error.message}")
-      case Right(init: Initialize)                 => Stream.eval(initialize(id, init))
-      case Right(_: Ping)                          => Stream.emit(LegacyCodec.encodeEmptyResult(id))
-      case Right(request) =>
+      case Left(DecodeError.InvalidParams(error))  =>
+        failure(ErrorCode.InvalidParams, s"Invalid params: ${error.message}")
+      case Right(init: Initialize) => Stream.eval(initialize(id, init))
+      case Right(_: Ping)          => Stream.emit(LegacyCodec.encodeEmptyResult(id))
+      case Right(request)          =>
         Stream.eval(session.get).flatMap {
-          case None => failure(ErrorCode.InvalidRequest, "The connection is not initialized")
+          case None          => failure(ErrorCode.InvalidRequest, "The connection is not initialized")
           case Some(session) =>
             request match
-              case _: SetLevel => Stream.emit(LegacyCodec.encodeEmptyResult(id))
+              case _: SetLevel  => Stream.emit(LegacyCodec.encodeEmptyResult(id))
               case r: Subscribe =>
-                Stream.eval(subscribe(r.uri, session, context).map(_ => LegacyCodec.encodeEmptyResult(id): JsonRpc.Message))
+                Stream.eval(subscribe(r.uri, session, context).map(_ =>
+                  LegacyCodec.encodeEmptyResult(id): JsonRpc.Message
+                ))
                   .handleErrorWith(e => Stream.eval(errorResponse(rpc.id, e)))
               case r: Unsubscribe =>
                 Stream.eval(unsubscribe(r.uri).as(LegacyCodec.encodeEmptyResult(id): JsonRpc.Message))

@@ -9,8 +9,8 @@ import scala.concurrent.duration.FiniteDuration
 
 /** How the state that is passed through the client is protected (see [[Outcome.InputRequired]]). */
 case class RequestStateConfig(
-  /** The first key protects new states, all keys are accepted when verifying (allows rotating keys). All instances of
-    * a server have to use the same keys.
+  /** The first key protects new states, all keys are accepted when verifying (allows rotating keys). All instances of a
+    * server have to use the same keys.
     */
   keys: List[Array[Byte]],
   /** For how long a state is valid */
@@ -31,7 +31,7 @@ object RequestStateConfig:
     RequestStateConfig(List(key), timeToLive)
 
   def defaultPrincipal(authentication: Authentication): String = authentication match
-    case Authentication.Anonymous => "anonymous"
+    case Authentication.Anonymous          => "anonymous"
     case Authentication.BearerToken(token) =>
       "bearer:" + MessageDigest.getInstance("SHA-256").digest(token.getBytes("UTF-8")).map("%02x".format(_)).mkString
 

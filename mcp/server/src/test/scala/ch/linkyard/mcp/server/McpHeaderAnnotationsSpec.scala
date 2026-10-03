@@ -36,21 +36,29 @@ class McpHeaderAnnotationsSpec extends AnyFunSpec with Matchers with EitherValue
     }
 
     it("should reject number parameters") {
-      validate(json"""{"type": "object", "properties": {"n": {"type": "number", "x-mcp-header": "N"}}}""").isLeft shouldBe true
+      validate(
+        json"""{"type": "object", "properties": {"n": {"type": "number", "x-mcp-header": "N"}}}"""
+      ).isLeft shouldBe true
     }
 
     it("should reject parameters of other types") {
-      validate(json"""{"type": "object", "properties": {"a": {"type": "array", "x-mcp-header": "A"}}}""").isLeft shouldBe true
+      validate(
+        json"""{"type": "object", "properties": {"a": {"type": "array", "x-mcp-header": "A"}}}"""
+      ).isLeft shouldBe true
       validate(json"""{"type": "object", "properties": {"a": {"x-mcp-header": "A"}}}""").isLeft shouldBe true
     }
 
     it("should reject empty names and names that are not valid header names") {
       for name <- List("", "has space", "colon:", "new\nline", "ünicode") do
-        validate(json"""{"type": "object", "properties": {"a": {"type": "string", "x-mcp-header": $name}}}""").isLeft shouldBe true
+        validate(
+          json"""{"type": "object", "properties": {"a": {"type": "string", "x-mcp-header": $name}}}"""
+        ).isLeft shouldBe true
     }
 
     it("should reject names that are not strings") {
-      validate(json"""{"type": "object", "properties": {"a": {"type": "string", "x-mcp-header": 5}}}""").isLeft shouldBe true
+      validate(
+        json"""{"type": "object", "properties": {"a": {"type": "string", "x-mcp-header": 5}}}"""
+      ).isLeft shouldBe true
     }
 
     it("should reject names that are used twice independent of the case") {

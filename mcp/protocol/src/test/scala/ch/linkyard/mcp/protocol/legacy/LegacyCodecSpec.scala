@@ -57,8 +57,14 @@ class LegacyCodecSpec extends AnyFunSpec with Matchers with EitherValues with Op
 
     it("should decode the requests that only exist in the earlier versions") {
       LegacyCodec.decodeRequest(request("ping")).value shouldBe Ping()
-      LegacyCodec.decodeRequest(request("logging/setLevel", json"""{"level": "debug"}""")).value shouldBe SetLevel("debug")
-      LegacyCodec.decodeRequest(request("resources/subscribe", json"""{"uri": "a://b"}""")).value shouldBe Subscribe("a://b")
+      LegacyCodec.decodeRequest(request(
+        "logging/setLevel",
+        json"""{"level": "debug"}""",
+      )).value shouldBe SetLevel("debug")
+      LegacyCodec.decodeRequest(request(
+        "resources/subscribe",
+        json"""{"uri": "a://b"}""",
+      )).value shouldBe Subscribe("a://b")
       LegacyCodec.decodeRequest(request("resources/unsubscribe", json"""{"uri": "a://b"}""")).value shouldBe
         Unsubscribe("a://b")
     }
@@ -73,7 +79,9 @@ class LegacyCodecSpec extends AnyFunSpec with Matchers with EitherValues with Op
     }
 
     it("should not know the requests of the new version") {
-      LegacyCodec.decodeRequest(request("server/discover")).left.value shouldBe DecodeError.UnknownMethod("server/discover")
+      LegacyCodec.decodeRequest(request("server/discover")).left.value shouldBe DecodeError.UnknownMethod(
+        "server/discover"
+      )
       LegacyCodec.decodeRequest(request("subscriptions/listen", json"""{"notifications": {}}""")).left.value shouldBe
         DecodeError.UnknownMethod("subscriptions/listen")
     }
@@ -118,14 +126,18 @@ class LegacyCodecSpec extends AnyFunSpec with Matchers with EitherValues with Op
       val response = LegacyCodec.encodeResponse(
         LegacyVersion.V2025_11_25,
         RequestId.IdNumber(1),
-        Tool.ListTools.Response(Nil, _meta = Meta("a" -> 1.asJson, Meta.Key.ServerInfo -> Implementation("s", "1").asJson)),
+        Tool.ListTools.Response(
+          Nil,
+          _meta = Meta("a" -> 1.asJson, Meta.Key.ServerInfo -> Implementation("s", "1").asJson),
+        ),
       )
       response.result("_meta") shouldBe Some(json"""{"a": 1}""")
     }
 
     it("should leave out the icons for 2025-06-18") {
       val tool = Tool("t", inputSchema = JsonObject("type" -> "object".asJson), icons = Some(List(Icon("https://i/x.png"))))
-      val schemaWithIconsProperty = JsonObject("type" -> "object".asJson, "properties" -> json"""{"icons": {"type": "string"}}""")
+      val schemaWithIconsProperty =
+        JsonObject("type" -> "object".asJson, "properties" -> json"""{"icons": {"type": "string"}}""")
       val response = LegacyCodec.encodeResponse(
         LegacyVersion.V2025_06_18,
         RequestId.IdNumber(1),
@@ -161,7 +173,14 @@ class LegacyCodecSpec extends AnyFunSpec with Matchers with EitherValues with Op
       val result = InitializeResult(
         "2025-06-18",
         ServerCapabilities(tools = Some(ServerCapabilities.Tools(Some(true)))),
-        Implementation("s", "1", title = Some("S"), description = Some("d"), websiteUrl = Some("https://s"), icons = Some(List(Icon("x")))),
+        Implementation(
+          "s",
+          "1",
+          title = Some("S"),
+          description = Some("d"),
+          websiteUrl = Some("https://s"),
+          icons = Some(List(Icon("x"))),
+        ),
         Some("hi"),
       )
       LegacyCodec.encodeInitializeResult(RequestId.IdNumber(1), result).result shouldBe json"""{
@@ -210,7 +229,10 @@ class LegacyCodecSpec extends AnyFunSpec with Matchers with EitherValues with Op
       LegacyCodec.decodeElicitResult(
         JsonRpc.Response.Error(JsonRpc.Id.IdInt(1), JsonRpc.ErrorCode.InternalError, "x", None)
       ) shouldBe ElicitResult(ElicitAction.Cancel)
-      LegacyCodec.decodeElicitResult(JsonRpc.Response.Success(JsonRpc.Id.IdInt(1), JsonObject("action" -> 1.asJson))) shouldBe
+      LegacyCodec.decodeElicitResult(JsonRpc.Response.Success(
+        JsonRpc.Id.IdInt(1),
+        JsonObject("action" -> 1.asJson),
+      )) shouldBe
         ElicitResult(ElicitAction.Cancel)
     }
   }

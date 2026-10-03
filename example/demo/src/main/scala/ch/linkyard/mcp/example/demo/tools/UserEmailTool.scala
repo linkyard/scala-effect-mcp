@@ -4,10 +4,10 @@ import cats.effect.IO
 import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.protocol.ElicitAction
+import ch.linkyard.mcp.server.Ask
+import ch.linkyard.mcp.server.ElicitationField
 import ch.linkyard.mcp.server.McpError
 import ch.linkyard.mcp.server.RequestContext
-import ch.linkyard.mcp.server.ElicitationField
-import ch.linkyard.mcp.server.Ask
 import ch.linkyard.mcp.server.ToolFunction
 import com.melvinlow.json.schema.generic.auto.given
 import io.circe.generic.auto.given
@@ -29,10 +29,10 @@ object UserEmailTool:
       ToolFunction.Effect.ReadOnly,
       isOpenWorld = true,
     ),
-    execute,
+    (in: Input, _: RequestContext[IO], ask: Ask[IO]) => execute(in, ask),
   )
 
-  private def execute(in: Input, context: RequestContext[IO], ask: Ask[IO]): IO[String] =
+  private def execute(in: Input, ask: Ask[IO]): IO[String] =
     for
       answer <- ask.elicit(
         "company",

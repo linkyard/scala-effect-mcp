@@ -158,11 +158,17 @@ object ToolFunction:
     override val resultSchema: Option[JsonSchema] = None
     override def apply(args: JsonObject, context: RequestContext[F]): F[Outcome[Response]] =
       handleParsedArgs[F, A](args)(a =>
-        Ask.run(context)(ask => f(a, context, ask)).map(_.map(text => CallTool.Response.Success(List(Content.Text(text)), None)))
+        Ask.run(context)(ask => f(a, context, ask)).map(_.map(text =>
+          CallTool.Response.Success(List(Content.Text(text)), None)
+        ))
       )
   end InteractiveText
 
-  private class InteractiveStructured[F[_]: MonadThrow, A: JsonSchemaEncoder: Decoder, B: JsonSchemaEncoder: Encoder.AsObject](
+  private class InteractiveStructured[
+    F[_]: MonadThrow,
+    A: JsonSchemaEncoder: Decoder,
+    B: JsonSchemaEncoder: Encoder.AsObject,
+  ](
     val info: Info,
     val meta: Option[JsonObject],
     f: (A, RequestContext[F], Ask[F]) => F[B],

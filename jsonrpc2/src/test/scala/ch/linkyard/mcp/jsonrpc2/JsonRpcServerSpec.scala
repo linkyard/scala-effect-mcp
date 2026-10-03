@@ -63,19 +63,20 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers:
     onRequest: Request => Stream[IO, Message],
     unsolicited: Stream[IO, Message] = Stream.empty,
   )(test: Harness => IO[A]): A =
-    val program = for
-      input <- Queue.unbounded[IO, Option[MessageEnvelope]]
-      sent <- Queue.unbounded[IO, Message]
-      notifications <- Ref.of[IO, List[Notification]](Nil)
-      responses <- Ref.of[IO, List[Response]](Nil)
-      errors <- Ref.of[IO, List[Throwable]](Nil)
-      handler = Handler(onRequest, notifications, responses, unsolicited)
-      connection = Connection(input, sent)
-      server <- JsonRpcServer.run(handler, connection, e => errors.update(_ :+ e)).start
-      result <- test(Harness(handler, input, connection, errors))
-      _ <- input.offer(None)
-      _ <- server.join.timeout(5.seconds)
-    yield result
+    val program =
+      for
+        input <- Queue.unbounded[IO, Option[MessageEnvelope]]
+        sent <- Queue.unbounded[IO, Message]
+        notifications <- Ref.of[IO, List[Notification]](Nil)
+        responses <- Ref.of[IO, List[Response]](Nil)
+        errors <- Ref.of[IO, List[Throwable]](Nil)
+        handler = Handler(onRequest, notifications, responses, unsolicited)
+        connection = Connection(input, sent)
+        server <- JsonRpcServer.run(handler, connection, e => errors.update(_ :+ e)).start
+        result <- test(Harness(handler, input, connection, errors))
+        _ <- input.offer(None)
+        _ <- server.join.timeout(5.seconds)
+      yield result
     program.timeout(20.seconds).unsafeRunSync()
 
   import cats.implicits.*
@@ -99,7 +100,9 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers:
     it("should cancel a request when the client cancels it") {
       val cancelled = Deferred.unsafe[IO, Unit]
       val started = Deferred.unsafe[IO, Unit]
-      val outcome = withServer(_ => Stream.exec(started.complete(()).void) ++ Stream.never[IO].onFinalize(cancelled.complete(()).void)) {
+      val outcome = withServer(_ =>
+        Stream.exec(started.complete(()).void) ++ Stream.never[IO].onFinalize(cancelled.complete(()).void)
+      ) {
         h => h.send(request(1)) >> started.get >> h.send(cancel(1)) >> cancelled.get.timeout(5.seconds).as("cancelled")
       }
       outcome shouldBe "cancelled"
@@ -141,23 +144,24 @@ class JsonRpcServerSpec extends AnyFunSpec with Matchers:
     it("should cancel the open requests when the connection ends") {
       val cancelled = Deferred.unsafe[IO, Unit]
       val started = Deferred.unsafe[IO, Unit]
-      val program = for
-        input <- Queue.unbounded[IO, Option[MessageEnvelope]]
-        sent <- Queue.unbounded[IO, Message]
-        notifications <- Ref.of[IO, List[Notification]](Nil)
-        responses <- Ref.of[IO, List[Response]](Nil)
-        handler = Handler(
-          _ => Stream.exec(started.complete(()).void) ++ Stream.never[IO].onFinalize(cancelled.complete(()).void),
-          notifications,
-          responses,
-        )
-        _ <- input.offer(Some(request(1).withoutAuth))
-        server <- JsonRpcServer.run(handler, Connection(input, sent)).start
-        _ <- started.get
-        _ <- input.offer(None)
-        _ <- server.join
-        _ <- cancelled.get.timeout(5.seconds)
-      yield "done"
+      val program =
+        for
+          input <- Queue.unbounded[IO, Option[MessageEnvelope]]
+          sent <- Queue.unbounded[IO, Message]
+          notifications <- Ref.of[IO, List[Notification]](Nil)
+          responses <- Ref.of[IO, List[Response]](Nil)
+          handler = Handler(
+            _ => Stream.exec(started.complete(()).void) ++ Stream.never[IO].onFinalize(cancelled.complete(()).void),
+            notifications,
+            responses,
+          )
+          _ <- input.offer(Some(request(1).withoutAuth))
+          server <- JsonRpcServer.run(handler, Connection(input, sent)).start
+          _ <- started.get
+          _ <- input.offer(None)
+          _ <- server.join
+          _ <- cancelled.get.timeout(5.seconds)
+        yield "done"
       program.timeout(20.seconds).unsafeRunSync() shouldBe "done"
     }
   }

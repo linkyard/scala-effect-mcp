@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.kernel.Deferred
 import cats.effect.unsafe.implicits.global
-import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
@@ -19,6 +18,7 @@ import io.circe.generic.auto.given
 import io.circe.syntax.*
 
 import scala.concurrent.duration.DurationInt
+import ch.linkyard.mcp.protocol.Prompts.GetPrompt.Response
 
 object TestSupport:
   val ModernVersion = "2026-07-28"
@@ -89,7 +89,8 @@ object TestSupport:
       info("failing"),
       (_, _) => IO.raiseError(ToolFunction.ToolError(List(Content.Text("it failed")))),
     )
-    private val crashing = ToolFunction.text[IO, Echo](info("crashing"), (_, _) => IO.raiseError(new RuntimeException("boom")))
+    private val crashing =
+      ToolFunction.text[IO, Echo](info("crashing"), (_, _) => IO.raiseError(new RuntimeException("boom")))
     private val slow = ToolFunction.text[IO, Echo](
       info("slow"),
       (_, _) => started.complete(()) >> IO.never[String].onCancel(cancelled.complete(()).void),
@@ -102,6 +103,7 @@ object TestSupport:
       info("whoami"),
       (_, ctx) => seen.update(_ :+ ctx).as(ctx.authentication.toString),
     )
+
     /** asks for the name, remembers the first question in the state */
     private val ask = ToolFunction.native[IO](
       info("ask"),
@@ -111,24 +113,29 @@ object TestSupport:
           case Some(result) if result.action == ElicitAction.Accept =>
             val name = result.content.flatMap(_("name")).flatMap(_.asString).getOrElse("?")
             IO.pure(Outcome.Complete(Tool.CallTool.Response.Success(
-              List(Content.Text(s"hello $name (${ctx.input.state.getOrElse("no state")})")),
+              List(Content.Text(s"hello $name (${ctx.input.state.getOrElse("no state")})"))
             )))
           case Some(_) => IO.pure(Outcome.Complete(Tool.CallTool.Response.Error(List(Content.Text("declined")))))
-          case None =>
-            IO.pure(Outcome.elicit("name", "Who are you?", ElicitationField.Text("name", true)).withState("asked"))
+          case None    =>
+            IO.pure(Outcome.elicit("name", "Who are you?", ElicitationField.Text("name", true)).withState("asked")),
     )
     private val admin = ToolFunction.text[IO, Echo](info("admin"), (_, _) => IO.pure("admin"))
     private val iconic = ToolFunction.text[IO, Echo](
       info("iconic").copy(icons = Some(List(Icon("https://example.com/icon.png")))),
       (in, _) => IO.pure(in.text),
     )
+
     /** structured content that is not an object (not possible in the earlier versions) */
     private val arrays = ToolFunction.native[IO](
       info("arrays"),
       JsonObject("type" -> "object".asJson),
       (_, _) =>
-        IO.pure(Outcome.Complete(Tool.CallTool.Response.Success(List(Content.Text("[1,2]")), Some(Json.arr(1.asJson, 2.asJson))))),
+        IO.pure(Outcome.Complete(Tool.CallTool.Response.Success(
+          List(Content.Text("[1,2]")),
+          Some(Json.arr(1.asJson, 2.asJson)),
+        ))),
     )
+
     /** never satisfied */
     private val needy = ToolFunction.native[IO](
       info("needy"),
@@ -146,7 +153,7 @@ object TestSupport:
         description = Some("greets"),
         arguments = Some(List(PromptArgument("name", required = Some(true)))),
       )
-      override def get(arguments: Map[String, String], context: RequestContext[IO]) =
+      override def get(arguments: Map[String, String], context: RequestContext[IO]): IO[Outcome[Response]] =
         IO.pure(Outcome.Complete(Prompts.GetPrompt.Response(
           List(PromptMessage(Role.User, Content.Text(s"hello ${arguments.getOrElse("name", "you")}"))),
           Some("a greeting"),
@@ -156,7 +163,7 @@ object TestSupport:
         valueToComplete: String,
         otherArguments: Map[String, String],
         context: RequestContext[IO],
-      ) = IO.pure(Completion(List("alice", "bob").filter(_.startsWith(valueToComplete))))
+      ): IO[Completion] = IO.pure(Completion(List("alice", "bob").filter(_.startsWith(valueToComplete))))
     override def prompts(context: RequestContext[IO]): IO[List[PromptFunction[IO]]] = IO.pure(List(prompt))
 
     val allResources: List[Resource] = List("a", "b", "c", "d", "e").map(n => Resource(s"test://$n", n))
@@ -170,7 +177,7 @@ object TestSupport:
         valueToComplete: String,
         otherArguments: Map[String, String],
         context: RequestContext[IO],
-      ) = IO.pure(Completion(List("a", "b")))
+      ): IO[Completion] = IO.pure(Completion(List("a", "b")))
     override def resourceTemplates(
       after: Option[Cursor],
       context: RequestContext[IO],
@@ -200,5 +207,17 @@ object TestSupport:
         updates <- fs2.concurrent.Topic[IO, String]
         seen <- Ref.of[IO, List[RequestContext[IO]]](Nil)
         server = FixtureServer(tools, cancelled, started, changes, updates, seen)
-        _ <- tools.set(List(server.echo, server.add, server.failing, server.crashing, server.slow, server.progress, server.whoami, server.ask, server.iconic, server.arrays, server.needy))
+        _ <- tools.set(List(
+          server.echo,
+          server.add,
+          server.failing,
+          server.crashing,
+          server.slow,
+          server.progress,
+          server.whoami,
+          server.ask,
+          server.iconic,
+          server.arrays,
+          server.needy,
+        ))
       yield server

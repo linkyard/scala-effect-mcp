@@ -54,7 +54,7 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
     ): Request[IO] =
       post(
         rpc(id, method, params.deepMerge(Json.obj("_meta" -> meta))),
-        List("MCP-Protocol-Version" -> Version, "Mcp-Method" -> method) ++ name.map("Mcp-Name" -> _)*,
+        List("MCP-Protocol-Version" -> Version, "Mcp-Method" -> method) ++ name.map("Mcp-Name" -> _)*
       )
 
     def legacy(id: Int, method: String, params: Json, session: Option[String]): Request[IO] =
@@ -85,13 +85,16 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
       it("should answer a request with json") {
         val (status, mediaType, body) = withHttp() { h =>
           for
-            response <- h.run(h.modern(1, "tools/call", json"""{"name": "echo", "arguments": {"text": "hi"}}""", Some("echo")))
+            response <-
+              h.run(h.modern(1, "tools/call", json"""{"name": "echo", "arguments": {"text": "hi"}}""", Some("echo")))
             body <- response.as[Json]
           yield (response.status, contentType(response), body)
         }
         status shouldBe Status.Ok
         mediaType shouldBe Some("application/json")
-        body.hcursor.downField("result").downField("content").focus.value shouldBe json"""[{"type": "text", "text": "hi"}]"""
+        body.hcursor.downField(
+          "result"
+        ).downField("content").focus.value shouldBe json"""[{"type": "text", "text": "hi"}]"""
         body.hcursor.get[Int]("id").value shouldBe 1
       }
 
@@ -123,7 +126,8 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
       it("should reject requests whose headers do not match the body") {
         val (status, body) = withHttp() { h =>
           for
-            response <- h.run(h.modern(1, "tools/call", json"""{"name": "echo", "arguments": {"text": "hi"}}""", Some("other")))
+            response <-
+              h.run(h.modern(1, "tools/call", json"""{"name": "echo", "arguments": {"text": "hi"}}""", Some("other")))
             body <- response.as[Json]
           yield (response.status, body)
         }
@@ -172,7 +176,12 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
       it("should retry a request that needs input") {
         val body = withHttp() { h =>
           for
-            first <- h.run(h.modern(1, "tools/call", json"""{"name": "ask", "arguments": {"text": "me"}}""", Some("ask"))).flatMap(_.as[Json])
+            first <- h.run(h.modern(
+              1,
+              "tools/call",
+              json"""{"name": "ask", "arguments": {"text": "me"}}""",
+              Some("ask"),
+            )).flatMap(_.as[Json])
             state = first.hcursor.downField("result").get[String]("requestState").value
             params = Json.obj(
               "name" -> "ask".asJson,
@@ -183,13 +192,16 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
             second <- h.run(h.modern(2, "tools/call", params, Some("ask"))).flatMap(_.as[Json])
           yield second
         }
-        body.hcursor.downField("result").downField("content").focus.value shouldBe json"""[{"type": "text", "text": "hello Ada"}]"""
+        body.hcursor.downField(
+          "result"
+        ).downField("content").focus.value shouldBe json"""[{"type": "text", "text": "hello Ada"}]"""
       }
 
       it("should stream the notifications of a subscription") {
         val messages = withHttp() { h =>
           for
-            response <- h.run(h.modern(1, "subscriptions/listen", json"""{"notifications": {"toolsListChanged": true}}"""))
+            response <-
+              h.run(h.modern(1, "subscriptions/listen", json"""{"notifications": {"toolsListChanged": true}}"""))
             collected <- events(response).take(2).compile.toList.start
             _ <- IO.sleep(300.millis)
             _ <- h.server.changes.publish1(())
@@ -269,7 +281,8 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
         val body = withHttp() { h =>
           for
             (_, session) <- initialize(h)
-            response <- h.run(h.legacy(2, "tools/call", json"""{"name": "echo", "arguments": {"text": "hi"}}""", Some(session)))
+            response <-
+              h.run(h.legacy(2, "tools/call", json"""{"name": "echo", "arguments": {"text": "hi"}}""", Some(session)))
             body <- response.as[Json]
           yield body
         }
@@ -280,7 +293,8 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
         val (question, result) = withHttp() { h =>
           for
             (_, session) <- initialize(h)
-            response <- h.run(h.legacy(2, "tools/call", json"""{"name": "ask", "arguments": {"text": "me"}}""", Some(session)))
+            response <-
+              h.run(h.legacy(2, "tools/call", json"""{"name": "ask", "arguments": {"text": "me"}}""", Some(session)))
             queue <- Queue.unbounded[IO, Json]
             reader <- events(response).evalMap(queue.offer).compile.drain.start
             question <- queue.take.timeout(5.seconds)
@@ -298,7 +312,9 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
           yield question -> result
         }
         question.hcursor.get[String]("method").value shouldBe "elicitation/create"
-        result.hcursor.downField("result").downField("content").focus.value shouldBe json"""[{"type": "text", "text": "hello Bo"}]"""
+        result.hcursor.downField(
+          "result"
+        ).downField("content").focus.value shouldBe json"""[{"type": "text", "text": "hello Bo"}]"""
       }
 
       it("should stream the changes on the get stream of the session") {
@@ -319,7 +335,10 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
         val (deleted, after) = withHttp() { h =>
           for
             (_, session) <- initialize(h)
-            deleted <- h.run(Request[IO](Method.DELETE, uri"/mcp").putHeaders(host, Header.Raw(ci"Mcp-Session-Id", session))).map(_.status)
+            deleted <- h.run(Request[IO](
+              Method.DELETE,
+              uri"/mcp",
+            ).putHeaders(host, Header.Raw(ci"Mcp-Session-Id", session))).map(_.status)
             after <- h.run(h.legacy(2, "tools/list", json"{}", Some(session))).map(_.status)
           yield (deleted, after)
         }
@@ -328,7 +347,9 @@ class HttpEndToEndSpec extends AnyFunSpec with Matchers with OptionValues with E
       }
 
       it("should reject an unknown session") {
-        withHttp()(h => h.run(h.legacy(2, "tools/list", json"{}", Some("0" * 32))).map(_.status)) shouldBe Status.NotFound
+        withHttp()(h =>
+          h.run(h.legacy(2, "tools/list", json"{}", Some("0" * 32))).map(_.status)
+        ) shouldBe Status.NotFound
       }
 
       it("should not open sessions when legacy clients are disabled") {

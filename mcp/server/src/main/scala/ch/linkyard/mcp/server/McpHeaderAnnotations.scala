@@ -41,7 +41,7 @@ private[server] object McpHeaderAnnotations:
 
   private def annotation(property: String, definition: JsonObject): Either[String, List[String]] =
     definition(Key) match
-      case None => Right(Nil)
+      case None        => Right(Nil)
       case Some(value) =>
         for
           name <- value.asString.toRight(s"$Key of '$property' has to be a string")
@@ -65,7 +65,7 @@ private[server] object McpHeaderAnnotations:
         obj.toList.map {
           case ("properties", properties) =>
             properties.asObject.map(_.values.map(countAnnotations).sum).getOrElse(countAnnotations(properties))
-          case (Key, _)       => 1
-          case (_, value)     => countAnnotations(value)
+          case (Key, _)   => 1
+          case (_, value) => countAnnotations(value)
         }.sum,
     )

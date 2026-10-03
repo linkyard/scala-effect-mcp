@@ -10,8 +10,8 @@ import ch.linkyard.mcp.protocol.PromptMessage
 import ch.linkyard.mcp.protocol.Prompts
 import ch.linkyard.mcp.protocol.Role
 import ch.linkyard.mcp.server.Outcome
-import ch.linkyard.mcp.server.RequestContext
 import ch.linkyard.mcp.server.PromptFunction
+import ch.linkyard.mcp.server.RequestContext
 
 object StoryPrompt extends PromptFunction[IO]:
   override val prompt: Prompt = Prompt(
