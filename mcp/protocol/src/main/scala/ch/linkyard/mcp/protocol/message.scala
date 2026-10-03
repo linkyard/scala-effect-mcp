@@ -1,66 +1,91 @@
 package ch.linkyard.mcp.protocol
 
-trait Request:
-  val method: RequestMethod
-  type Response <: ClientResponse | ServerResponse
-trait McpResponse
-trait Notification:
-  val method: NotificationMethod
+import io.circe.Decoder
 
-type ServerRequest = Ping | Elicitation.Create | Roots.ListRoots | Sampling.CreateMessage
-type ClientResponse =
-  Ping.Response | Elicitation.Create.Response | Roots.ListRoots.Response | Sampling.CreateMessage.Response
-
+/** All requests of a (2026-07-28) client. The requests of earlier protocol versions are in the `legacy` package. */
 type ClientRequest =
-  Ping | Initialize | Prompts.ListPrompts | Prompts.GetPrompt | Resources.ListResources | Resources.ListResourceTemplates | Resources.ReadResource | Resources.Subscribe | Resources.Unsubscribe | Tool.ListTools | Tool.CallTool | Logging.SetLevel | Completion.Complete
+  Discover | Tool.ListTools | Tool.CallTool | Prompts.ListPrompts | Prompts.GetPrompt | Resources.ListResources |
+    Resources.ListResourceTemplates | Resources.ReadResource | Subscriptions.Listen | Completion.Complete
+
 type ServerResponse =
-  Ping.Response | Initialize.Response | Prompts.ListPrompts.Response | Prompts.ListPrompts.Response | Prompts.GetPrompt.Response | Resources.ListResources.Response | Resources.ListResourceTemplates.Response | Resources.ReadResource.Response | Resources.Subscribe.Response | Resources.Unsubscribe.Response | Tool.ListTools.Response | Tool.CallTool.Response | Logging.SetLevel.Response | Completion.Complete.Response
+  Discover.Response | Tool.ListTools.Response | Tool.CallTool.Response | Prompts.ListPrompts.Response |
+    Prompts.GetPrompt.Response | Resources.ListResources.Response | Resources.ListResourceTemplates.Response |
+    Resources.ReadResource.Response | Subscriptions.Listen.Response | Completion.Complete.Response |
+    InputRequiredResult
 
-type ClientNotification = Initialized | Roots.ListChanged | Cancelled | ProgressNotification
+type ClientNotification = Cancelled
+
 type ServerNotification =
-  Cancelled | ProgressNotification | Prompts.ListChanged | Resources.Updated | Resources.ListChanged | Tool.ListChanged | Logging.LoggingMessage
+  Cancelled | ProgressNotification | Prompts.ListChanged | Resources.Updated | Resources.ListChanged |
+    Tool.ListChanged | Subscriptions.Acknowledged
 
-// we define them as enums for exhaustiveness checking
-enum RequestMethod(val key: String):
-  // Basic protocol methods
-  case Initialize extends RequestMethod("initialize")
-  case Ping extends RequestMethod("ping")
-  // Resources methods
-  case ListResources extends RequestMethod("resources/list")
-  case ListResourceTemplates extends RequestMethod("resources/templates/list")
-  case ReadResource extends RequestMethod("resources/read")
-  case Subscribe extends RequestMethod("resources/subscribe")
-  case Unsubscribe extends RequestMethod("resources/unsubscribe")
-  // Prompts methods
-  case ListPrompts extends RequestMethod("prompts/list")
-  case GetPrompt extends RequestMethod("prompts/get")
-  // Tools methods
-  case ListTools extends RequestMethod("tools/list")
-  case CallTool extends RequestMethod("tools/call")
-  // Logging methods
-  case SetLevel extends RequestMethod("logging/setLevel")
-  // Sampling methods
-  case CreateMessage extends RequestMethod("sampling/createMessage")
-  // Autocomplete methods
-  case Complete extends RequestMethod("completion/complete")
-  // Roots methods
-  case ListRoots extends RequestMethod("roots/list")
-  // Elicitation methods
-  case ElicitCreate extends RequestMethod("elicitation/create")
+object RequestMethod:
+  val Discover = "server/discover"
+  val ListTools = "tools/list"
+  val CallTool = "tools/call"
+  val ListPrompts = "prompts/list"
+  val GetPrompt = "prompts/get"
+  val ListResources = "resources/list"
+  val ListResourceTemplates = "resources/templates/list"
+  val ReadResource = "resources/read"
+  val SubscriptionsListen = "subscriptions/listen"
+  val Complete = "completion/complete"
 
-enum NotificationMethod(val key: String):
-  // Basic protocol notifications
-  case Initialized extends NotificationMethod("notifications/initialized")
-  case Cancelled extends NotificationMethod("notifications/cancelled")
-  case Progress extends NotificationMethod("notifications/progress")
-  // Resource notifications
-  case ResourceUpdated extends NotificationMethod("notifications/resources/updated")
-  case ResourceListChanged extends NotificationMethod("notifications/resources/list_changed")
-  // Tool notifications
-  case ToolListChanged extends NotificationMethod("notifications/tools/list_changed")
-  // Prompt notifications
-  case PromptListChanged extends NotificationMethod("notifications/prompts/list_changed")
-  // Roots notifications
-  case RootsListChanged extends NotificationMethod("notifications/roots/list_changed")
-  // Logging notifications
-  case LoggingMessage extends NotificationMethod("notifications/message")
+  /** Requests that may be answered with an InputRequiredResult */
+  val supportingInputRequired: Set[String] = Set(CallTool, GetPrompt, ReadResource)
+
+object NotificationMethod:
+  val Cancelled = "notifications/cancelled"
+  val Progress = "notifications/progress"
+  val ToolListChanged = "notifications/tools/list_changed"
+  val PromptListChanged = "notifications/prompts/list_changed"
+  val ResourceListChanged = "notifications/resources/list_changed"
+  val ResourceUpdated = "notifications/resources/updated"
+  val SubscriptionsAcknowledged = "notifications/subscriptions/acknowledged"
+
+extension (request: ClientRequest)
+  def method: String = request match
+    case _: Discover                        => RequestMethod.Discover
+    case _: Tool.ListTools                  => RequestMethod.ListTools
+    case _: Tool.CallTool                   => RequestMethod.CallTool
+    case _: Prompts.ListPrompts             => RequestMethod.ListPrompts
+    case _: Prompts.GetPrompt               => RequestMethod.GetPrompt
+    case _: Resources.ListResources         => RequestMethod.ListResources
+    case _: Resources.ListResourceTemplates => RequestMethod.ListResourceTemplates
+    case _: Resources.ReadResource          => RequestMethod.ReadResource
+    case _: Subscriptions.Listen            => RequestMethod.SubscriptionsListen
+    case _: Completion.Complete             => RequestMethod.Complete
+
+  def meta: Meta = request match
+    case r: Discover                        => r._meta
+    case r: Tool.ListTools                  => r._meta
+    case r: Tool.CallTool                   => r._meta
+    case r: Prompts.ListPrompts             => r._meta
+    case r: Prompts.GetPrompt               => r._meta
+    case r: Resources.ListResources         => r._meta
+    case r: Resources.ListResourceTemplates => r._meta
+    case r: Resources.ReadResource          => r._meta
+    case r: Subscriptions.Listen            => r._meta
+    case r: Completion.Complete             => r._meta
+
+/** What the client declares on every request (in the `_meta`). */
+case class RequestInfo(
+  protocolVersion: String,
+  clientInfo: Option[Implementation],
+  clientCapabilities: ClientCapabilities,
+)
+
+object RequestInfo:
+  /** Reads the per-request fields, the error message describes the first missing/invalid field. */
+  def fromMeta(meta: Meta): Either[String, RequestInfo] =
+    def field[A: Decoder](key: String): Either[String, Option[A]] = meta.getAs[A](key) match
+      case None            => Right(None)
+      case Some(Right(a))  => Right(Some(a))
+      case Some(Left(err)) => Left(s"Invalid _meta field $key: ${err.message}")
+    def required[A: Decoder](key: String): Either[String, A] =
+      field[A](key).flatMap(_.toRight(s"Missing required _meta field $key"))
+    for
+      version <- required[String](Meta.Key.ProtocolVersion)
+      capabilities <- required[ClientCapabilities](Meta.Key.ClientCapabilities)
+      info <- field[Implementation](Meta.Key.ClientInfo)
+    yield RequestInfo(version, info, capabilities)
