@@ -3,7 +3,6 @@ package ch.linkyard.mcp.server
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.kernel.Deferred
-import cats.implicits.*
 import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
 import ch.linkyard.mcp.jsonrpc2.JsonRpcHandler
