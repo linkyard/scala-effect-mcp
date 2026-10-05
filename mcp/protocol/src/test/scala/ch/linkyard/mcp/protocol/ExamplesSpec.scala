@@ -10,6 +10,8 @@ import io.circe.syntax.*
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.nio.file.FileSystemNotFoundException
+import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -17,7 +19,19 @@ import scala.jdk.CollectionConverters.*
 
 /** Round trips the examples of the specification (schema/2026-07-28/examples). */
 class ExamplesSpec extends AnyFunSpec with Matchers:
-  private val root: Path = Paths.get(getClass.getResource("/examples/2026-07-28").toURI)
+  private val root: Path = classpathDirectory("/examples/2026-07-28")
+
+  /** sbt 2 serves test resources from a jar; that filesystem has to be opened first. */
+  private def classpathDirectory(resource: String): Path =
+    val uri = getClass.getResource(resource).toURI
+    if uri.getScheme == "jar" then
+      val fs =
+        try FileSystems.getFileSystem(uri)
+        catch
+          case _: FileSystemNotFoundException =>
+            FileSystems.newFileSystem(uri, Map.empty[String, AnyRef].asJava)
+      fs.getPath(resource)
+    else Paths.get(uri)
 
   private def examples(dir: String): List[(String, Json)] =
     val path = root.resolve(dir)

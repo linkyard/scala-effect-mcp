@@ -208,7 +208,6 @@ lazy val exampleConformance = (project in file("example/conformance"))
     assembly / aggregate := true,
     assembly / mainClass := Some("ch.linkyard.mcp.example.conformance.ConformanceMcpServer"),
     assembly / assemblyJarName := "conformance.jar",
-    assembly / test := {},
     publish / skip := true,
     libraryDependencies ++= Seq(
       "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
