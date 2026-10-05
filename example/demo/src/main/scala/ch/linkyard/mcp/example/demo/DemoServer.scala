@@ -35,7 +35,7 @@ class DemoServer extends McpServer[IO] with McpServer.ToolProvider[IO] with McpS
 
   override def resource(uri: String, context: RequestContext[IO]): IO[Outcome[ReadResource.Response]] =
     if uri.startsWith("animal://") then AnimalResource.resource(uri).map(Outcome.Complete(_))
-    else IO.raiseError(McpError.resourceNotFound(uri))
+    else McpError.raiseResourceNotFound[IO](uri)
 
   override def resourceTemplates(
     after: Option[Cursor],

@@ -197,7 +197,7 @@ object TestSupport:
           ttlMs = 1000,
           cacheScope = CacheScope.Public,
         )))
-      else IO.raiseError(McpError.resourceNotFound(uri))
+      else McpError.raiseResourceNotFound[IO](uri)
     override def resourceChanges: fs2.Stream[IO, Unit] = fs2.Stream.empty
     override def resourceUpdates(uri: String, context: RequestContext[IO]): fs2.Stream[IO, ResourceUpdated] =
       updates.subscribe(10).filter(_ == uri).map(_ => ResourceUpdated())

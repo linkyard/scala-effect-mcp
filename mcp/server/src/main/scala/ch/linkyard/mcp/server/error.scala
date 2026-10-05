@@ -28,6 +28,8 @@ object McpError:
       Some(Json.obj("uri" -> uri.asJson)),
       isResourceNotFound = true,
     ))
+  def raiseResourceNotFound[F[_]: MonadThrow](uri: String): F[Nothing] =
+    MonadThrow[F].raiseError(resourceNotFound(uri))
 
   case class McpErrorException(error: McpError) extends RuntimeException(error.message)
 

@@ -79,6 +79,6 @@ private[conformance] object ConformanceResources:
           ttlMs = 5.minutes.toMillis,
           cacheScope = CacheScope.Private,
         )))
-      case None => IO.raiseError(McpError.resourceNotFound(uri))
+      case None => McpError.raiseResourceNotFound[IO](uri)
   end read
 end ConformanceResources

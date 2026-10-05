@@ -21,7 +21,7 @@ object AnimalResource:
             )
           )
         ).pure
-      case None => IO.raiseError(McpError.resourceNotFound(uri))
+      case None => McpError.raiseResourceNotFound[IO](uri)
 
   def resources(after: Option[Cursor]): fs2.Stream[IO, Pageable[Res]] =
     fs2.Stream.emits(AnimalBox.animals
