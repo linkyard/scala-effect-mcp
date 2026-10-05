@@ -65,11 +65,11 @@ import ch.linkyard.mcp.server.*
 
 class MyServer extends McpServer[IO] with McpServer.ToolProvider[IO]:
   override val serverInfo: Implementation = Implementation("My MCP Server", "0.1.0")
-  override def instructions: IO[Option[String]] = None.pure
+  override def instructions(context: RequestContext[IO]): IO[Option[String]] = None.pure
   override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] = List(echoTool).pure
 ```
 
-The library detects that `MyServer` extends `ToolProvider` and automatically tells the client that tools are available. The `context` parameter lets you vary the list of tools by the authentication of the caller (`context.authentication`). There is no handshake and no per-client state: what a client may see can depend on its authentication, but not on the connection.
+The library detects that `MyServer` extends `ToolProvider` and automatically tells the client that tools are available. The `context` parameter lets you vary the list of tools and the instructions by the authentication of the caller (`context.authentication`). There is no handshake and no per-client state: what a client may see can depend on its authentication, but not on the connection.
 
 ## 4. Wire It Up and Run
 

@@ -78,7 +78,8 @@ class McpCodecSpec extends AnyFunSpec with Matchers with EitherValues with Optio
     describe("encodeResponse") {
       it("should mark results as complete") {
         val response = McpCodec.encodeResponse(RequestId.IdString("1"), Tool.ListTools.Response(Nil))
-        response.result shouldBe json"""{"resultType": "complete", "tools": [], "ttlMs": 0, "cacheScope": "private"}""".asObject.get
+        response.result shouldBe
+          json"""{"resultType": "complete", "tools": [], "ttlMs": 0, "cacheScope": "private"}""".asObject.get
       }
 
       it("should mark input required results") {

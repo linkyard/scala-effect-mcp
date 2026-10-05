@@ -55,10 +55,10 @@ private[server] final class ServerCore[F[_]](
       case _                      => None,
   )
 
-  /** The cache hints of the discover result: the server may be changed (new tools) any time. */
-  def discover(supportedVersions: List[String]): F[Discover.Response] =
-    server.instructions.map(instructions =>
-      Discover.Response(supportedVersions, capabilities, instructions, ttlMs = 0, cacheScope = CacheScope.Public)
+  /** The cache hints of the discover result: the instructions may depend on the authentication. */
+  def discover(supportedVersions: List[String], env: RequestEnv[F], meta: Meta): F[Discover.Response] =
+    server.instructions(context(meta, env)).map(instructions =>
+      Discover.Response(supportedVersions, capabilities, instructions, ttlMs = 0, cacheScope = CacheScope.Private)
     )
 
   def context(

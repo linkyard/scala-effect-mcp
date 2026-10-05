@@ -211,12 +211,14 @@ class LegacyCodecSpec extends AnyFunSpec with Matchers with EitherValues with Op
       val schema = json"""{"type": "object", "properties": {}}""".asObject.get
       val request = LegacyCodec.encodeElicitation(RequestId.IdString("s1"), ElicitParams.Form("who?", schema), "e1")
       request.method shouldBe "elicitation/create"
-      request.params.value shouldBe json"""{"message": "who?", "requestedSchema": {"type": "object", "properties": {}}}""".asObject.get
+      request.params.value shouldBe
+        json"""{"message": "who?", "requestedSchema": {"type": "object", "properties": {}}}""".asObject.get
     }
 
     it("should write the url request with the elicitation id") {
       val request = LegacyCodec.encodeElicitation(RequestId.IdString("s1"), ElicitParams.Url("go", "https://x"), "e1")
-      request.params.value shouldBe json"""{"mode": "url", "message": "go", "url": "https://x", "elicitationId": "e1"}""".asObject.get
+      request.params.value shouldBe
+        json"""{"mode": "url", "message": "go", "url": "https://x", "elicitationId": "e1"}""".asObject.get
     }
 
     it("should read the answer") {

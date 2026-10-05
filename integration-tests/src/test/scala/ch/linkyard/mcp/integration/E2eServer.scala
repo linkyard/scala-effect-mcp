@@ -32,7 +32,8 @@ class E2eServer(
   entered: Ref[IO, Int],
 ) extends McpServer[IO] with ToolProvider[IO] with ToolProviderWithChanges[IO]:
   override val serverInfo: Implementation = Implementation("e2e", "1.0")
-  override def instructions: IO[Option[String]] = IO.pure(Some("test server"))
+  override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] =
+    IO.pure(Some("test server"))
   override def toolChanges: fs2.Stream[IO, Unit] = changes.subscribe(10)
 
   private def info(name: String) = ToolFunction.Info(name, None, None, ToolFunction.Effect.ReadOnly, isOpenWorld = false)

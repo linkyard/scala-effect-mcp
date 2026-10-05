@@ -30,7 +30,7 @@ class SharedIdsSpec extends AnyFunSpec with Matchers with OptionValues:
   private class GatedServer(gate: Deferred[IO, Unit], entered: Ref[IO, Int], bothEntered: Deferred[IO, Unit])
       extends McpServer[IO] with ToolProvider[IO]:
     override val serverInfo: Implementation = Implementation("gated", "1")
-    override def instructions: IO[Option[String]] = IO.pure(None)
+    override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] = IO.pure(None)
     private def info(name: String) =
       ToolFunction.Info(name, None, None, ToolFunction.Effect.ReadOnly, isOpenWorld = false)
 

@@ -54,7 +54,7 @@ private[server] final class LegacyConnection[F[_]] private (
       case Left(DecodeError.UnknownMethod(method)) => failure(ErrorCode.MethodNotFound, s"Method not found: $method")
       case Left(DecodeError.InvalidParams(error))  =>
         failure(ErrorCode.InvalidParams, s"Invalid params: ${error.message}")
-      case Right(init: Initialize) => Stream.eval(initialize(id, init))
+      case Right(init: Initialize) => initialize(id, init, context)
       case Right(_: Ping)          => Stream.emit(LegacyCodec.encodeEmptyResult(id))
       case Right(request)          =>
         Stream.eval(session.get).flatMap {
@@ -91,16 +91,34 @@ private[server] final class LegacyConnection[F[_]] private (
   /** Cancellations are handled by the connection (they also have to work over http). */
   override def cancelledRequest(notification: JsonRpc.Notification): Option[JsonRpc.Id] = None
 
-  private def initialize(id: RequestId, init: Initialize): F[JsonRpc.Message] =
-    val version = LegacyVersion.negotiate(init.protocolVersion)
-    for
-      before <- session.getAndSet(Some(LegacySession(version, ClientInfo(Some(init.clientInfo), init.capabilities))))
-      _ <- if before.isEmpty then startListChangeNotifications else F.unit
-      instructions <- core.server.instructions
-    yield LegacyCodec.encodeInitializeResult(
-      id,
-      InitializeResult(version, core.capabilities, core.server.serverInfo, instructions),
-    )
+  private def initialize(
+    id: RequestId,
+    init: Initialize,
+    context: JsonRpcHandler.Context,
+  ): Stream[F, JsonRpc.Message] =
+    Stream.eval(Queue.unbounded[F, Option[JsonRpc.Message]]).flatMap { queue =>
+      val version = LegacyVersion.negotiate(init.protocolVersion)
+      val client = ClientInfo(Some(init.clientInfo), init.capabilities)
+      val env = RequestEnv[F](
+        client,
+        context.authentication,
+        context.connection,
+        notification => queue.offer(Some(McpCodec.encodeNotification(notification))),
+      )
+      val run =
+        (for
+          before <- session.getAndSet(Some(LegacySession(version, client)))
+          _ <- if before.isEmpty then startListChangeNotifications else F.unit
+          instructions <- core.server.instructions(core.context(init._meta, env))
+        yield LegacyCodec.encodeInitializeResult(
+          id,
+          InitializeResult(version, core.capabilities, core.server.serverInfo, instructions),
+        ): JsonRpc.Message)
+          .handleErrorWith(errorResponse(id.toJsonRpc, _))
+          .flatMap(message => queue.offer(Some(message)))
+          .guarantee(queue.offer(None))
+      Stream.fromQueueNoneTerminated(queue).concurrently(Stream.eval(run))
+    }
 
   private def startListChangeNotifications: F[Unit] =
     val all = SubscriptionFilter(Some(true), Some(true), Some(true))

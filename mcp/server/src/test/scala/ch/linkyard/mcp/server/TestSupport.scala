@@ -9,6 +9,7 @@ import ch.linkyard.mcp.jsonrpc2.JsonRpc
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
 import ch.linkyard.mcp.jsonrpc2.JsonRpcHandler
 import ch.linkyard.mcp.protocol.*
+import ch.linkyard.mcp.protocol.Prompts.GetPrompt.Response
 import ch.linkyard.mcp.protocol.Resources.ReadResource
 import ch.linkyard.mcp.server.McpServer.*
 import com.melvinlow.json.schema.generic.auto.given
@@ -18,7 +19,6 @@ import io.circe.generic.auto.given
 import io.circe.syntax.*
 
 import scala.concurrent.duration.DurationInt
-import ch.linkyard.mcp.protocol.Prompts.GetPrompt.Response
 
 object TestSupport:
   val ModernVersion = "2026-07-28"
@@ -82,7 +82,8 @@ object TestSupport:
   ) extends McpServer[IO] with ToolProvider[IO] with ToolProviderWithChanges[IO] with PromptProvider[IO]
       with ResourceSubscriptionProvider[IO]:
     override val serverInfo: Implementation = Implementation("fixture", "1.2.3")
-    override def instructions: IO[Option[String]] = IO.pure(Some("use the tools"))
+    override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] =
+      IO.pure(Some("use the tools"))
     override val maxPageSize: Int = 2
     override def toolsCache: CacheHint = CacheHint.public(5.minutes)
     override def promptsCache: CacheHint = CacheHint.perAuthorization(1.minute)

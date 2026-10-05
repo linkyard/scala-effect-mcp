@@ -46,7 +46,7 @@ After:
 ```scala
 class MyServer extends McpServer[IO] with McpServer.ToolProvider[IO]:
   override val serverInfo: Implementation = Implementation("My MCP Server", "0.1.0")
-  override def instructions: IO[Option[String]] = None.pure
+  override def instructions(context: RequestContext[IO]): IO[Option[String]] = None.pure
   override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] = List(echoTool).pure
 ```
 

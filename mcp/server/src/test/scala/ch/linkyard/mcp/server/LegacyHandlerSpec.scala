@@ -30,6 +30,7 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
     id: Int = 1,
     version: String = "2025-06-18",
     capabilities: Json = json"""{"elicitation": {}}""",
+    meta: Json = Json.obj(),
   ): JsonRpc.Request = JsonRpc.Request(
     JsonRpc.Id.IdInt(id),
     "initialize",
@@ -37,8 +38,16 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       "protocolVersion" -> version.asJson,
       "capabilities" -> capabilities,
       "clientInfo" -> json"""{"name": "old client", "version": "0.1"}""",
+      "_meta" -> meta,
     )),
   )
+
+  private def instructionsServer: McpServer[IO] = new McpServer[IO]:
+    override val serverInfo: Implementation = Implementation("s", "1")
+    override def instructions(context: RequestContext[IO]): IO[Option[String]] =
+      context.reportProgress(1, None, Some("preparing")).as(
+        Some(if context.authentication == Authentication.BearerToken("admin") then "for admin" else "for guests")
+      )
 
   private def plain(id: Int, method: String, params: (String, Json)*): JsonRpc.Request =
     JsonRpc.Request(JsonRpc.Id.IdInt(id), method, Some(JsonObject(params*)))
@@ -109,6 +118,24 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should not contain the fields of the newer version") {
         val result = withSession((_, h) => messages(h, initializeRequest())).result
         result.keys.toSet shouldBe Set("protocolVersion", "capabilities", "serverInfo", "instructions")
+      }
+
+      it("should return instructions that depend on the authentication") {
+        val factory = instructionsServer.handlerFactory(McpServerConfig(), _ => IO.unit)
+        factory.connection(httpInfo).use(h => messages(h, initializeRequest())).run
+          .result("instructions") shouldBe Some("for guests".asJson)
+        factory.connection(httpInfo).use(h => messages(h, initializeRequest(), Authentication.BearerToken("admin"))).run
+          .result("instructions") shouldBe Some("for admin".asJson)
+      }
+
+      it("should send the progress before the result when the client asks for it") {
+        val all = instructionsServer.handlerFactory(McpServerConfig(), _ => IO.unit).connection(httpInfo).use(h =>
+          messages(h, initializeRequest(meta = json"""{"progressToken": "p1"}"""))
+        ).run
+        all.notifications.map(_.method) shouldBe List("notifications/progress")
+        all.notifications.head.params.value("progressToken") shouldBe Some("p1".asJson)
+        all.notifications.head.params.value("message") shouldBe Some("preparing".asJson)
+        all.last shouldBe a[JsonRpc.Response.Success]
       }
 
       it("should reject invalid params") {
@@ -382,7 +409,8 @@ class LegacyHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should reject subscriptions when the server does not support them") {
         val bare = new McpServer[IO] with ToolProvider[IO]:
           override val serverInfo: Implementation = Implementation("bare", "1")
-          override def instructions: IO[Option[String]] = IO.pure(None)
+          override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] =
+            IO.pure(None)
           override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] = IO.pure(Nil)
         val error = bare.handlerFactory(McpServerConfig(), _ => IO.unit).connection(httpInfo).use(h =>
           messages(h, initializeRequest()) >> messages(h, plain(2, "resources/subscribe", "uri" -> "test://a".asJson))

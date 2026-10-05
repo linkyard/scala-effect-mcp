@@ -38,6 +38,13 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
   private def call(f: Fixture, id: Int, method: String, params: (String, Json)*): IO[List[JsonRpc.Message]] =
     messages(f.handler, request(id, method, params*))
 
+  private def instructionsServer: McpServer[IO] = new McpServer[IO]:
+    override val serverInfo: Implementation = Implementation("s", "1")
+    override def instructions(context: RequestContext[IO]): IO[Option[String]] =
+      context.reportProgress(1, None, Some("preparing")).as(
+        Some(if context.authentication == Authentication.BearerToken("admin") then "for admin" else "for guests")
+      )
+
   describe("A server (2026-07-28)") {
     describe("server/discover") {
       it("should return the supported versions, the capabilities and the instructions") {
@@ -57,6 +64,28 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
         val result = withFixture(f => call(f, 1, "server/discover")).result
         result("_meta").value.hcursor.downField("io.modelcontextprotocol/serverInfo").as[Implementation].value shouldBe
           Implementation("fixture", "1.2.3")
+      }
+
+      it("should mark the result as stale and private") {
+        val result = withFixture(f => call(f, 1, "server/discover")).result
+        result("ttlMs") shouldBe Some(0.asJson)
+        result("cacheScope") shouldBe Some("private".asJson)
+      }
+
+      it("should return instructions that depend on the authentication") {
+        val handler = instructionsServer.handlerFactory(McpServerConfig(), _ => IO.unit).stateless
+        messages(handler, request(1, "server/discover")).run.result("instructions") shouldBe Some("for guests".asJson)
+        messages(handler, request(1, "server/discover"), Authentication.BearerToken("admin")).run
+          .result("instructions") shouldBe Some("for admin".asJson)
+      }
+
+      it("should send the progress before the result when the client asks for it") {
+        val rpc = requestWithMeta(1, "server/discover", clientMeta(extra = "progressToken" -> "p1".asJson))
+        val all = messages(instructionsServer.handlerFactory(McpServerConfig(), _ => IO.unit).stateless, rpc).run
+        all.notifications.map(_.method) shouldBe List("notifications/progress")
+        all.notifications.head.params.value("progressToken") shouldBe Some("p1".asJson)
+        all.notifications.head.params.value("message") shouldBe Some("preparing".asJson)
+        all.last shouldBe a[JsonRpc.Response.Success]
       }
     }
 
@@ -115,7 +144,8 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
       it("should reject requests for features the server does not have") {
         val bare = new McpServer[IO]:
           override val serverInfo: Implementation = Implementation("bare", "1")
-          override def instructions: IO[Option[String]] = IO.pure(None)
+          override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] =
+            IO.pure(None)
         val handler = bare.handlerFactory(McpServerConfig(), _ => IO.unit).stateless
         messages(handler, request(1, "tools/list")).run.error.code shouldBe ErrorCode.MethodNotFound
         messages(handler, request(2, "prompts/list")).run.error.code shouldBe ErrorCode.MethodNotFound
@@ -570,7 +600,8 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
           started <- Ref.of[IO, Boolean](false)
           server = new McpServer[IO] with ToolProviderWithChanges[IO]:
             override val serverInfo: Implementation = Implementation("s", "1")
-            override def instructions: IO[Option[String]] = IO.pure(None)
+            override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] =
+              IO.pure(None)
             override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] = IO.pure(Nil)
             override def toolChanges: fs2.Stream[IO, Unit] = fs2.Stream.exec(started.set(true)) ++ fs2.Stream.never[IO]
           handler = server.handlerFactory(McpServerConfig(supportLegacyClients = false), _ => IO.unit).stateless

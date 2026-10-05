@@ -23,7 +23,7 @@ class DemoServer extends McpServer[IO] with McpServer.ToolProvider[IO] with McpS
     with McpServer.ResourceProvider[IO]:
   override val serverInfo: Implementation = Implementation("Demo MCP", "development")
   override val maxPageSize: Int = 5
-  override def instructions: IO[Option[String]] = None.pure
+  override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] = None.pure
 
   override def tools(context: RequestContext[IO]): IO[List[ToolFunction[IO]]] =
     List(ParrotTool(), AdderTool(), UserEmailTool()).pure

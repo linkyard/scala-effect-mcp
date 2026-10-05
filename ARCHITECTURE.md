@@ -97,7 +97,7 @@ The `legacy` package holds what only exists in the earlier revisions: `Initializ
 The main entry point for implementing an MCP server. It is stateless: the same instance serves all clients and requests. The base trait defines:
 
 * `serverInfo: Implementation`: name and version of your server
-* `instructions: F[Option[String]]`: optional instructions for the AI client
+* `instructions(context: RequestContext[F]): F[Option[String]]`: optional instructions for the AI client, may depend on the authentication
 * `maxPageSize: Int`: maximum number of resources on a page (default 100)
 
 To advertise tools, resources, or prompts, mix in the corresponding **provider traits**:
@@ -153,7 +153,7 @@ The sequential style for `InputRequired`. `ask.elicit(key, message, fields*)`, `
 
 ### CacheHint
 
-`CacheHint(ttl, scope)` tells clients for how long they may keep a result and who may cache it. `CacheHint.none` (the default) marks a result stale immediately, `CacheHint.public(ttl)` allows shared caches, `CacheHint.perAuthorization(ttl)` allows reuse only for the same authorization.
+`CacheHint(ttl, scope)` tells clients for how long they may keep a result and who may cache it. `CacheHint.none` (the default) marks a result stale immediately, `CacheHint.public(ttl)` allows shared caches, `CacheHint.perAuthorization(ttl)` allows reuse only for the same authorization. `server/discover` always answers with `ttlMs = 0` and `cacheScope = private`, because the instructions may depend on the authentication.
 
 ### McpServerConfig
 

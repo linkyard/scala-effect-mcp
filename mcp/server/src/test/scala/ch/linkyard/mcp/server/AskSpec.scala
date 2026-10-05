@@ -23,7 +23,7 @@ class AskSpec extends AnyFunSpec with Matchers with OptionValues with EitherValu
 
   private class InterviewServer(runs: Ref[IO, Int]) extends McpServer[IO] with ToolProvider[IO]:
     override val serverInfo: Implementation = Implementation("interview", "1")
-    override def instructions: IO[Option[String]] = IO.pure(None)
+    override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] = IO.pure(None)
 
     private val sequential = ToolFunction.interactiveText[IO, Nothing](
       toolInfo.copy(name = "sequential"),

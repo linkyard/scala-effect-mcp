@@ -11,7 +11,7 @@ lazy val root = (project in file("."))
     inThisBuild(List(
       Global / onChangedBuildSource := ReloadOnSourceChanges,
       usePipelining := false,
-      scalacOptions += "-source:3.10",
+      scalacOptions += "-source:3.9",
       scalacOptions += "-unchecked",
       scalacOptions += "-deprecation",
       scalacOptions += "-feature",

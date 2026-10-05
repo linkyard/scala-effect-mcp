@@ -23,8 +23,8 @@ trait McpServer[F[_]]:
   /** Name and version of the server */
   def serverInfo: Implementation
 
-  /** Instructions for the model on how to use the server */
-  def instructions: F[Option[String]]
+  /** Instructions for the model on how to use the server. May depend on the authentication, like the tools. */
+  def instructions(context: RequestContext[F]): F[Option[String]]
 
   /** The maximum number of items on a page of resources */
   def maxPageSize: Int = 100

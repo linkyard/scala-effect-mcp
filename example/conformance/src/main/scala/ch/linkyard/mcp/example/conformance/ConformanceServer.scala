@@ -23,7 +23,7 @@ class ConformanceServer private (toolChangeTopic: Topic[IO, Unit], promptChangeT
     extends McpServer[IO] with McpServer.ToolProviderWithChanges[IO] with McpServer.PromptProviderWithChanges[IO]
     with McpServer.ResourceSubscriptionProvider[IO]:
   override val serverInfo: Implementation = Implementation("mcp-conformance-test-server", "1.0.0")
-  override def instructions: IO[Option[String]] = IO.pure(None)
+  override def instructions(@scala.annotation.unused context: RequestContext[IO]): IO[Option[String]] = IO.pure(None)
 
   private val allTools = ConformanceTools.all(toolChangeTopic.publish1(()).void, promptChangeTopic.publish1(()).void)
 

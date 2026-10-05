@@ -65,8 +65,8 @@ private[server] final class ModernHandler[F[_]](core: ServerCore[F], supportedVe
         context.headers.map(_.filter(_._1.startsWith("mcp-param-"))),
       )
       val execution = (request match
-        case _: Discover => core.discover(supportedVersions).widen[ServerResponse]
-        case other       => core.execute(other, env)
+        case discover: Discover => core.discover(supportedVersions, env, discover._meta).widen[ServerResponse]
+        case other              => core.execute(other, env)
       ).map(response => McpCodec.encodeResponse(id.fromJsonRpc, response.withServerInfo(core.server.serverInfo)))
         .widen[JsonRpc.Message]
         .handleErrorWith(errorResponse(id, _))
@@ -89,9 +89,10 @@ private[server] final class ModernHandler[F[_]](core: ServerCore[F], supportedVe
     val response = McpCodec.encodeResponse(id.fromJsonRpc, Subscriptions.Listen.Response(meta))
     Stream.eval((Deferred[F, Unit], Queue.bounded[F, Option[JsonRpc.Message]](1024)).tupled).flatMap {
       (started, queue) =>
-        val pump = (Stream.exec(started.complete(()).void) ++
-          notifications.map(n => McpCodec.encodeNotification(n.withMeta(meta))))
-          .evalMap(message => queue.offer(Some(message))) ++ Stream.exec(queue.offer(None))
+        val pump =
+          (Stream.exec(started.complete(()).void) ++
+            notifications.map(n => McpCodec.encodeNotification(n.withMeta(meta))))
+            .evalMap(message => queue.offer(Some(message))) ++ Stream.exec(queue.offer(None))
         (Stream.exec(started.get) ++ Stream.emit(acknowledged) ++ Stream.fromQueueNoneTerminated(queue) ++
           Stream.emit(response)).concurrently(pump)
     }
