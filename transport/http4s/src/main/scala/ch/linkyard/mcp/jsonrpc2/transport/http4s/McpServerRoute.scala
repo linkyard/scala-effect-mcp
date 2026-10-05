@@ -29,9 +29,9 @@ import scala.util.Try
   *
   * Requests of current clients are self contained and are handled by the stateless handler of the factory. The
   * transport validates the standard request headers (`MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`) against the body
-  * and answers a mismatch with 400 and the JSON-RPC error -32020. The custom `Mcp-Param-*` headers are not validated
-  * here because the transport does not know the schemas of the tools, they are passed to the handler (see
-  * [[JsonRpcHandler.Context]]).
+  * and answers a mismatch with 400 and the JSON-RPC error -32020. The other headers of the request, except
+  * `Authorization`, are passed to the handler (see [[JsonRpcHandler.Context]]). The handler validates the `Mcp-Param-*`
+  * headers against the schemas of the tools.
   *
   * Clients of older protocol revisions start with an `initialize` request, which opens a session (only if the factory
   * supports sessions). All further messages of such a client carry the `Mcp-Session-Id` header and are routed to the
@@ -372,11 +372,11 @@ object McpServerRoute:
     )
 
   private def context(req: Request[IO], info: JsonRpcConnection.Info): JsonRpcHandler.Context =
-    JsonRpcHandler.Context(req.authentication, info, Some(paramHeaders(req)))
+    JsonRpcHandler.Context(req.authentication, info, Some(requestHeaders(req)))
 
-  private def paramHeaders(req: Request[IO]): Map[String, String] =
+  private def requestHeaders(req: Request[IO]): Map[String, String] =
     req.headers.headers.collect {
-      case h if h.name.toString.toLowerCase.startsWith("mcp-param-") => h.name.toString.toLowerCase -> h.value
+      case h if h.name.toString.toLowerCase != "authorization" => h.name.toString.toLowerCase -> h.value
     }.toMap
 
   private def describe(info: JsonRpcConnection.Info.Http): String = (info.client, info.server) match

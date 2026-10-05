@@ -35,7 +35,7 @@ object JsonRpcServer:
     out: Queue[F, JsonRpc.Message],
     running: Ref[F, Map[JsonRpc.Id, Fiber[F, Throwable, Unit]]],
   ): F[Unit] =
-    def contextOf(envelope: JsonRpc.MessageEnvelope) = JsonRpcHandler.Context(envelope.auth, connection.info)
+    def contextOf(envelope: JsonRpc.MessageEnvelope) = JsonRpcHandler.Context(envelope.auth, connection.info, None)
 
     def internalError(id: JsonRpc.Id): JsonRpc.Message =
       JsonRpc.Response.Error(id, JsonRpc.ErrorCode.InternalError, "Internal error", None)

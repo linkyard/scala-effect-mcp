@@ -40,7 +40,7 @@ object TestSupport:
     JsonRpc.Request(JsonRpc.Id.IdInt(id), method, Some(JsonObject(params*).add("_meta", meta.asJson)))
 
   def context(auth: Authentication = Authentication.Anonymous): JsonRpcHandler.Context =
-    JsonRpcHandler.Context(auth, JsonRpcConnection.Info.Other(Map.empty))
+    JsonRpcHandler.Context(auth, JsonRpcConnection.Info.Other(Map.empty), None)
 
   /** The context of an http request with these `Mcp-Param-*` headers. */
   def httpContext(paramHeaders: Map[String, String]): JsonRpcHandler.Context =

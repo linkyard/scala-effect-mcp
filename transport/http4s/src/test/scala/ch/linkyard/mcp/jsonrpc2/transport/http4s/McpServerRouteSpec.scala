@@ -222,16 +222,23 @@ class McpServerRouteSpec extends AnyFunSpec with Matchers:
       }
     }
 
-    it("passes the Mcp-Param headers to the handler, by their lower case name") {
+    it("passes the request headers to the handler, by their lower case name, except Authorization") {
       withRoute() { f =>
         val req = modern("tools/call", JsonObject("name" -> "t".asJson), Some("t"))
-          .putHeaders(Header.Raw(ci"Mcp-Param-Region", "us-west1"), Header.Raw(ci"X-Other", "ignored"))
+          .putHeaders(
+            Header.Raw(ci"Mcp-Param-Region", "us-west1"),
+            Header.Raw(ci"X-Other", "kept"),
+            headers.Authorization(Credentials.Token(AuthScheme.Bearer, "secret")),
+          )
         for
           res <- run(f, req)
           calls <- f.factory.statelessHandler.requests.get
         yield
           res.status shouldBe Status.Ok
-          calls.head._2.paramHeaders shouldBe Some(Map("mcp-param-region" -> "us-west1"))
+          val passed = calls.head._2.headers.get
+          passed("mcp-param-region") shouldBe "us-west1"
+          passed("x-other") shouldBe "kept"
+          passed should not contain key("authorization")
       }
     }
 

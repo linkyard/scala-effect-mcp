@@ -24,12 +24,12 @@ end JsonRpcHandler
 object JsonRpcHandler:
   /** What is known about the message from the transport.
     *
-    * @param paramHeaders
-    *   the `Mcp-Param-*` headers of an http request (lower case name and raw value), the handler validates them against
-    *   the body because only it knows the schemas of the tools. `None` for transports without headers.
+    * @param headers
+    *   the headers of the request (lower case name and raw value). `Authorization` is not included, it is
+    *   [[Authentication]]. `None` for transports without headers.
     */
   case class Context(
     authentication: Authentication,
     connection: JsonRpcConnection.Info,
-    paramHeaders: Option[Map[String, String]] = None,
+    headers: Option[Map[String, String]],
   )

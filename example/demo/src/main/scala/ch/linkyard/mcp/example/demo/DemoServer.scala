@@ -19,7 +19,6 @@ import ch.linkyard.mcp.server.RequestContext
 import ch.linkyard.mcp.server.ResourceTemplate
 import ch.linkyard.mcp.server.ToolFunction
 
-/** The same instance serves all clients. */
 class DemoServer extends McpServer[IO] with McpServer.ToolProvider[IO] with McpServer.PromptProvider[IO]
     with McpServer.ResourceProvider[IO]:
   override val serverInfo: Implementation = Implementation("Demo MCP", "development")
