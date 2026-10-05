@@ -9,8 +9,9 @@ import ch.linkyard.mcp.protocol.PromptArgument
 import ch.linkyard.mcp.protocol.PromptMessage
 import ch.linkyard.mcp.protocol.Prompts
 import ch.linkyard.mcp.protocol.Role
-import ch.linkyard.mcp.server.CallContext
+import ch.linkyard.mcp.server.Outcome
 import ch.linkyard.mcp.server.PromptFunction
+import ch.linkyard.mcp.server.RequestContext
 
 object StoryPrompt extends PromptFunction[IO]:
   override val prompt: Prompt = Prompt(
@@ -22,8 +23,11 @@ object StoryPrompt extends PromptFunction[IO]:
       PromptArgument(name = "color", title = "Favorite Color".some, None, true.some),
     ).some,
   )
-  override def get(arguments: Map[String, String], callContext: CallContext[IO]): IO[Prompts.GetPrompt.Response] =
-    Prompts.GetPrompt.Response(
+  override def get(
+    arguments: Map[String, String],
+    context: RequestContext[IO],
+  ): IO[Outcome[Prompts.GetPrompt.Response]] =
+    Outcome.Complete(Prompts.GetPrompt.Response(
       description = "Story Prompt".some,
       messages = PromptMessage(
         Role.User,
@@ -31,13 +35,13 @@ object StoryPrompt extends PromptFunction[IO]:
           s"Write a long story about ${arguments.get("name").getOrElse("a person")} which loves the color ${arguments.get("color").getOrElse("red")}."
         ),
       ) :: Nil,
-    ).pure
+    )).pure
 
   override def argumentCompletions(
     argumentName: String,
     valueToComplete: String,
     otherArguments: Map[String, String],
-    context: CallContext[IO],
+    context: RequestContext[IO],
   ): IO[Completion] = argumentName match
     case "name"  => Completion(values = Nil).pure
     case "color" =>

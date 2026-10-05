@@ -10,5 +10,5 @@ trait ResourceTemplate[F[_]]:
     argumentName: String,
     valueToComplete: String,
     otherArguments: Map[String, String],
-    context: CallContext[F],
+    context: RequestContext[F],
   ): F[Completion]

@@ -2,174 +2,107 @@ package ch.linkyard.mcp.server
 
 import cats.MonadThrow
 import cats.effect.Concurrent
-import cats.effect.implicits.*
 import cats.effect.kernel.Async
-import cats.effect.kernel.Resource as CEResource
 import cats.implicits.*
-import ch.linkyard.mcp.jsonrpc2.Authentication
 import ch.linkyard.mcp.jsonrpc2.JsonRpc.ErrorCode
 import ch.linkyard.mcp.jsonrpc2.JsonRpcConnection
-import ch.linkyard.mcp.jsonrpc2.JsonRpcConnectionHandler
+import ch.linkyard.mcp.jsonrpc2.JsonRpcHandlerFactory
 import ch.linkyard.mcp.jsonrpc2.JsonRpcServer
 import ch.linkyard.mcp.protocol.Cursor
-import ch.linkyard.mcp.protocol.Elicitation
-import ch.linkyard.mcp.protocol.Initialize.ClientCapabilities
-import ch.linkyard.mcp.protocol.Initialize.PartyInfo
-import ch.linkyard.mcp.protocol.JsonSchema
-import ch.linkyard.mcp.protocol.LoggingLevel
+import ch.linkyard.mcp.protocol.Implementation
 import ch.linkyard.mcp.protocol.Meta
-import ch.linkyard.mcp.protocol.Prompts
 import ch.linkyard.mcp.protocol.Resource
-import ch.linkyard.mcp.protocol.Resources
 import ch.linkyard.mcp.protocol.Resources.ReadResource
-import ch.linkyard.mcp.protocol.Roots
-import ch.linkyard.mcp.protocol.Sampling
-import ch.linkyard.mcp.protocol.Tool
-import ch.linkyard.mcp.server.LowlevelMcpServer.Communication
-import io.circe.Json
-import io.circe.JsonObject
-import io.circe.syntax.*
 
+/** An MCP server. It is stateless: the same instance serves all clients and requests, what a client is allowed to see
+  * may depend on its authentication (see the [[RequestContext]]) but not on the connection.
+  *
+  * Mix in the provider traits to expose tools, prompts or resources.
+  */
 trait McpServer[F[_]]:
-  /** Initialize the session, see the sub-trait of Session for the capabilities like tools, etc. */
-  def initialize(client: McpServer.Client[F], info: McpServer.ConnectionInfo[F]): CEResource[F, McpServer.Session[F]]
+  /** Name and version of the server */
+  def serverInfo: Implementation
+
+  /** Instructions for the model on how to use the server */
+  def instructions: F[Option[String]]
+
+  /** The maximum number of items on a page of resources */
+  def maxPageSize: Int = 100
+end McpServer
 
 object McpServer:
   extension [F[_]](server: McpServer[F])
-    def lowlevelFactory(connectionInfo: JsonRpcConnection.Info)(using
+    /** The handlers to serve the server with a transport. */
+    def handlerFactory(config: McpServerConfig, logError: Throwable => F[Unit])(using
       Async[F]
-    ): Communication[F] => CEResource[F, LowlevelMcpServer[F]] =
-      comms => McpServerBridge[F](switchTo => McpServerBridge.PhaseInitial(server, comms, connectionInfo, switchTo))
+    ): JsonRpcHandlerFactory[F] =
+      McpServerHandlers(ServerCore(server, config, logError))
 
-    def jsonRpcConnectionHandler(logError: Exception => F[Unit])(using Async[F]): JsonRpcConnectionHandler[F] =
-      new JsonRpcConnectionHandler[F]:
-        override def open(conn: JsonRpcConnection[F]): CEResource[F, Unit] = server.start(conn, logError)
-    end jsonRpcConnectionHandler
+    /** Serves a connection until its input ends (the connection of the stdio transport for example). */
+    def run(connection: JsonRpcConnection[F], logError: Throwable => F[Unit], config: McpServerConfig)(using
+      Async[F]
+    ): F[Unit] =
+      JsonRpcServer.serve(server.handlerFactory(config, logError), connection, logError)
 
-    def start(connection: JsonRpcConnection[F], logError: Exception => F[Unit])(using Async[F]): CEResource[F, Unit] =
-      for
-        jsonRpcServer <- LowlevelMcpServer.start(server.lowlevelFactory(connection.info), logError)
-        _ <- CEResource.make(JsonRpcServer.start[F](jsonRpcServer, connection).useForever.start)(_.cancel)
-      yield ()
-    end start
+    def run(connection: JsonRpcConnection[F], logError: Throwable => F[Unit])(using Async[F]): F[Unit] =
+      server.run(connection, logError, McpServerConfig.default)
+  end extension
 
-  trait Client[F[_]]:
-    val clientInfo: PartyInfo
-    val capabilities: ClientCapabilities
+  trait ToolProvider[F[_]] extends McpServer[F]:
+    /** The tools, may vary by the authentication but not by anything else. */
+    def tools(context: RequestContext[F]): F[List[ToolFunction[F]]]
 
-    /** Pings the client to check if it is still alive. */
-    def ping: F[Unit]
+    /** How long clients may keep the list of tools */
+    def toolsCache: CacheHint = CacheHint.none
 
-    /** Sends a logging message to the client. */
-    def log(level: LoggingLevel, logger: Option[String], message: String): F[Unit]
-
-    /** Sends a logging message to the client. */
-    def log(level: LoggingLevel, logger: Option[String], data: Json): F[Unit]
-
-    /** Ask the user for additional information, simpler variant for JsonSchema */
-    def elicit(message: String, fields: ElicitationField*): F[Elicitation.Create.Response] =
-      elicit(message, fields.toJsonSchema)
-
-    /** Ask the user for additional information */
-    def elicit(
-      message: String,
-      requestedSchema: JsonSchema,
-      _meta: Meta = Meta.empty,
-    ): F[Elicitation.Create.Response]
-
-    def listRoots: F[Roots.ListRoots.Response]
-
-    /** Ask the LLM for completions */
-    def sample(
-      messages: List[Sampling.Message],
-      maxTokens: Int,
-      modelPreferences: Option[Sampling.ModelPreferences] = None,
-      systemPrompt: Option[String] = None,
-      temperature: Option[Double] = None,
-      includeContext: Option[String] = None,
-      stopSequences: Option[List[String]] = None,
-      metadata: Option[JsonObject] = None,
-      _meta: Meta = Meta.empty,
-    ): F[Sampling.CreateMessage.Response]
-  end Client
-
-  trait ConnectionInfo[F[_]]:
-    /** the clients authentication (is kept up to date if the clients sends new bearer tokens) */
-    def authentication: F[Authentication]
-
-    def connection: JsonRpcConnection.Info
-  end ConnectionInfo
-
-  trait Session[F[_]]:
-    val serverInfo: PartyInfo
-    def instructions: F[Option[String]]
-    protected[server] def maxPageSize: Int = 100
-  end Session
-
-  // all the session traits
-  trait ToolProvider[F[_]] extends Session[F]:
-    def tools: F[List[ToolFunction[F]]]
   trait ToolProviderWithChanges[F[_]] extends ToolProvider[F]:
-    def toolChanges: fs2.Stream[F, Tool.ListChanged]
+    /** Emits when the list of tools changed */
+    def toolChanges: fs2.Stream[F, Unit]
 
-  trait PromptProvider[F[_]: MonadThrow] extends Session[F]:
-    def prompts: F[List[PromptFunction[F]]]
-    def prompt(name: String): F[PromptFunction[F]] =
-      prompts.flatMap(_.find(_.prompt.name == name).toRight(McpError.error(
+  trait PromptProvider[F[_]: MonadThrow] extends McpServer[F]:
+    def prompts(context: RequestContext[F]): F[List[PromptFunction[F]]]
+
+    /** How long clients may keep the list of prompts */
+    def promptsCache: CacheHint = CacheHint.none
+
+    def prompt(name: String, context: RequestContext[F]): F[PromptFunction[F]] =
+      prompts(context).flatMap(_.find(_.prompt.name == name).toRight(McpError.error(
         ErrorCode.InvalidParams,
         s"Prompt $name not found",
       )).liftTo[F])
+
   trait PromptProviderWithChanges[F[_]] extends PromptProvider[F]:
-    def promptChanges: fs2.Stream[F, Prompts.ListChanged]
+    /** Emits when the list of prompts changed */
+    def promptChanges: fs2.Stream[F, Unit]
 
+  /** An element together with the cursor that continues after it. */
   type Pageable[A] = (Cursor, A)
-  trait ResourceProvider[F[_]: MonadThrow: Concurrent] extends Session[F]:
-    def resources(after: Option[Cursor]): fs2.Stream[F, Pageable[Resource]]
-    def resource(uri: String, context: CallContext[F]): F[ReadResource.Response]
-    def resourceTemplates(after: Option[Cursor]): fs2.Stream[F, Pageable[ResourceTemplate[F]]]
-    def resourceTemplate(uri: String): F[ResourceTemplate[F]] =
-      resourceTemplates(None).compile.toList.flatMap(_.map(_._2).find(_.template.uriTemplate == uri)
-        .toRight(McpError.error(ErrorCode.InvalidParams, s"Resource template $uri not found"))
+
+  trait ResourceProvider[F[_]: MonadThrow: Concurrent] extends McpServer[F]:
+    def resources(after: Option[Cursor], context: RequestContext[F]): fs2.Stream[F, Pageable[Resource]]
+    def resourceTemplates(
+      after: Option[Cursor],
+      context: RequestContext[F],
+    ): fs2.Stream[F, Pageable[ResourceTemplate[F]]]
+
+    /** Reads a resource. Fail with [[McpError.resourceNotFound]] when it does not exist. */
+    def resource(uri: String, context: RequestContext[F]): F[Outcome[ReadResource.Response]]
+
+    def resourceTemplate(uriTemplate: String, context: RequestContext[F]): F[ResourceTemplate[F]] =
+      resourceTemplates(None, context).compile.toList.flatMap(_.map(_._2).find(_.template.uriTemplate == uriTemplate)
+        .toRight(McpError.error(ErrorCode.InvalidParams, s"Resource template $uriTemplate not found"))
         .liftTo[F])
+
+    /** How long clients may keep the lists of resources and resource templates */
+    def resourcesCache: CacheHint = CacheHint.none
+
   trait ResourceProviderWithChanges[F[_]] extends ResourceProvider[F]:
-    def resourceChanges: fs2.Stream[F, Resources.ListChanged]
+    /** Emits when the list of resources changed */
+    def resourceChanges: fs2.Stream[F, Unit]
+
   trait ResourceSubscriptionProvider[F[_]] extends ResourceProviderWithChanges[F]:
-    def resourceSubscription(uri: String, context: CallContext[F]): fs2.Stream[F, ResourceUpdated]
+    /** Emits whenever the resource with the uri is updated. */
+    def resourceUpdates(uri: String, context: RequestContext[F]): fs2.Stream[F, ResourceUpdated]
 
-  trait RootChangeAwareProvider[F[_]] extends Session[F]:
-    def rootsChanged: F[Unit]
-
-  case class ClientInfo(
-    clientInfo: PartyInfo,
-    capabilities: ClientCapabilities,
-    protocolVersion: String,
-  )
   case class ResourceUpdated(meta: Meta = Meta.empty)
-
-  enum ElicitationField:
-    case Text(name: String, required: Boolean, title: Option[String] = None, description: Option[String] = None)
-    case YesNo(name: String, required: Boolean, title: Option[String] = None, description: Option[String] = None)
-    case Number(name: String, required: Boolean, title: Option[String] = None, description: Option[String] = None)
-
-    def name: String
-    def title: Option[String]
-    def description: Option[String]
-    def required: Boolean
-    private[McpServer] def toJsonSchema: Json = Json.obj(
-      "type" -> (this match
-        case _: Text   => "string".asJson
-        case _: YesNo  => "boolean".asJson
-        case _: Number => "number".asJson),
-      "title" -> title.getOrElse(name).asJson,
-      "description" -> description.asJson,
-      "required" -> required.asJson,
-    ).deepDropNullValues
-
-  extension (fields: Seq[ElicitationField])
-    private def toJsonSchema: JsonSchema = JsonObject(
-      "type" -> "object".asJson,
-      "properties" -> Json.obj(
-        fields.map(f => f.name -> f.toJsonSchema)*
-      ).asJson,
-      "required" -> fields.filter(_.required).map(_.name).asJson,
-    )
+end McpServer

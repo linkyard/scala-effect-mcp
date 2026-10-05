@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.implicits.*
 import ch.linkyard.mcp.protocol.Completion
 import ch.linkyard.mcp.protocol.Resource.Template
-import ch.linkyard.mcp.server.CallContext
+import ch.linkyard.mcp.server.RequestContext
 import ch.linkyard.mcp.server.ResourceTemplate
 
 object AnimalResourceTemplate extends ResourceTemplate[IO]:
@@ -19,7 +19,7 @@ object AnimalResourceTemplate extends ResourceTemplate[IO]:
     argumentName: String,
     valueToComplete: String,
     otherArguments: Map[String, String],
-    context: CallContext[IO],
+    context: RequestContext[IO],
   ): IO[Completion] =
     val options = AnimalBox.animals.map(_.name)
     val matching =

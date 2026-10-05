@@ -10,7 +10,9 @@ import ch.linkyard.mcp.jsonrpc2.transport.http4s.MinimalOAuthAuthorizationServer
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.MinimalOAuthAuthorizationServer.ClientCredentials
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.OAuthMiddleware
 import ch.linkyard.mcp.jsonrpc2.transport.http4s.SessionStore
-import ch.linkyard.mcp.server.*
+import ch.linkyard.mcp.jsonrpc2.transport.http4s.TokenValidation
+import ch.linkyard.mcp.server.McpServer.*
+import ch.linkyard.mcp.server.McpServerConfig
 import com.comcast.ip4s.Host
 import com.comcast.ip4s.Port
 import org.http4s.Uri
@@ -51,7 +53,7 @@ object SimpleAuthenticatedServer extends IOApp:
   private def program(idp: Uri, staticClient: Option[ClientCredentials]): Resource[IO, Unit] =
     for
       given SessionStore[IO] <- SessionStore.inMemory[IO](30.minutes)
-      handler = TheServer().jsonRpcConnectionHandler(logError)
+      factory = TheServer().handlerFactory(McpServerConfig.default, logError)
       given Client[IO] <- EmberClientBuilder.default[IO].build
       root = Uri.Path.Root / "_api"
       authServer <- MinimalOAuthAuthorizationServer.fromOidcConfig(idp, staticClient)
@@ -60,10 +62,10 @@ object SimpleAuthenticatedServer extends IOApp:
           name = "simple-authenticated-server",
           authorizationServers = authServer.rootUri :: Nil,
           scopes = List("openid"),
-          validateToken = t => t.nonEmpty.pure, // check the token here, using jwt signature check or whatelse
+          validateToken = t => IO.pure(TokenValidation.of(t.nonEmpty)), // check the token here, using jwt signature check or whatelse
           root = root,
         )
-      mcpRoute = McpServerRoute.route(handler, root)
+      mcpRoute = McpServerRoute.route(factory, root = root)
       route = middleware.wellKnownRoutes <+> authServer.route <+> middleware.protectMcp(mcpRoute)
       _ <- EmberServerBuilder.default[IO]
         .withHost(Host.fromString("127.0.0.1").get)
@@ -72,5 +74,5 @@ object SimpleAuthenticatedServer extends IOApp:
         .build
     yield ()
 
-  private def logError(error: Exception): IO[Unit] =
-    Logger[IO].warn(error)(s"Error parsing request data")
+  private def logError(error: Throwable): IO[Unit] =
+    Logger[IO].warn(error)("Error while handling a request")

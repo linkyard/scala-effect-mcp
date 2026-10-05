@@ -59,10 +59,12 @@ lazy val root = (project in file("."))
     transportHttp4s,
     mcpProtocol,
     mcpServer,
+    integrationTests,
     exampleSimpleEcho,
     exampleSimpleAuthenticated,
     exampleDemo,
     exampleDemoHttp,
+    exampleConformance,
   )
 
 ThisBuild / commands += Command.command("cleanup") { state =>
@@ -128,6 +130,18 @@ lazy val mcpServer = (project in file("mcp/server"))
   ).dependsOn(jsonrpc2, mcpProtocol)
 
 
+/** Tests that run the server together with the transports. */
+lazy val integrationTests = (project in file("integration-tests"))
+  .settings(
+    name := "integration-tests",
+    publish / skip := true,
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-circe" % Dependencies.http4s,
+      "com.melvinlow" %% "scala-json-schema" % Dependencies.scalaJsonSchema,
+      "io.circe" %% "circe-generic" % Dependencies.circe,
+    ),
+  ).dependsOn(mcpServer, transportStdio, transportHttp4s)
+
 lazy val exampleSimpleEcho = (project in file("example/simple-echo"))
   .settings(
     name := "example-simple-echo",
@@ -185,3 +199,19 @@ lazy val exampleDemoHttp = (project in file("example/demo-http"))
     libraryDependencies ++= Dependencies.logBinding,
   )
   .dependsOn(exampleDemo, transportHttp4s)
+
+/** Server for the official conformance test suite (see the README of the example). */
+lazy val exampleConformance = (project in file("example/conformance"))
+  .settings(
+    name := "example-conformance",
+    run / fork := true,
+    assembly / aggregate := true,
+    assembly / mainClass := Some("ch.linkyard.mcp.example.conformance.ConformanceMcpServer"),
+    assembly / assemblyJarName := "conformance.jar",
+    publish / skip := true,
+    libraryDependencies ++= Seq(
+      "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
+    ),
+    libraryDependencies ++= Dependencies.logBinding,
+  )
+  .dependsOn(mcpServer, transportHttp4s)

@@ -1,15 +1,38 @@
 package ch.linkyard.mcp.protocol
 
 import cats.kernel.Monoid
+import io.circe.Codec
 import io.circe.Decoder
+import io.circe.DecodingFailure
 import io.circe.Encoder
 import io.circe.Json
 import io.circe.JsonObject
+import io.circe.derivation.Configuration
+import io.circe.derivation.ConfiguredCodec
 import io.circe.syntax.*
 
 import java.time.Instant
 import java.util.Base64
 import scala.util.Try
+
+/** Derivation configuration used for all protocol messages (uses the default values of missing fields). */
+private[protocol] given Configuration = Configuration.default.withDefaults
+
+extension [A](codec: ConfiguredCodec[A])
+  /** Same codec but None/null values are not written. */
+  private[protocol] def withoutNulls: Codec.AsObject[A] =
+    Codec.AsObject.from(codec, Encoder.AsObject.instance(a => codec.encodeObject(a).filter(!_._2.isNull)))
+
+/** Builds a json object without the null values. */
+private[protocol] def obj(fields: (String, Json)*): JsonObject =
+  JsonObject.fromIterable(fields.filterNot(_._2.isNull))
+
+/** Codec for an enumeration represented as a string. */
+private[protocol] def stringEnumCodec[A](name: String, values: (String, A)*): Codec[A] =
+  Codec.from(
+    Decoder.decodeString.emap(s => values.find(_._1 == s).map(_._2).toRight(s"Unknown $name: $s")),
+    Encoder.encodeString.contramap(a => values.find(_._2 == a).map(_._1).getOrElse(a.toString)),
+  )
 
 enum RequestId:
   case IdString(id: String)
@@ -39,17 +62,29 @@ object ProgressToken:
       .orElse(c.as[Long].map(TokenNumber.apply))
   }
 
+/** The `_meta` object of requests, results and notifications. */
 opaque type Meta = JsonObject
 object Meta:
+  object Key:
+    val ProgressToken = "progressToken"
+    val ProtocolVersion = "io.modelcontextprotocol/protocolVersion"
+    val ClientInfo = "io.modelcontextprotocol/clientInfo"
+    val ClientCapabilities = "io.modelcontextprotocol/clientCapabilities"
+    val LogLevel = "io.modelcontextprotocol/logLevel"
+    val ServerInfo = "io.modelcontextprotocol/serverInfo"
+    val SubscriptionId = "io.modelcontextprotocol/subscriptionId"
+
   def apply(values: (String, Json)*): Meta = JsonObject(values*)
   def apply(obj: JsonObject): Meta = obj
   val empty: Meta = JsonObject.empty
-  def withRequestRelation(req: RequestId): Meta = JsonObject("relatesTo" -> req.asJson)
-  def withProgressToken(t: ProgressToken): Meta = JsonObject("progressToken" -> t.asJson)
+  def withProgressToken(t: ProgressToken): Meta = JsonObject(Key.ProgressToken -> t.asJson)
   extension (m: Meta)
-    def progressToken: Option[ProgressToken] = m("progressToken").flatMap(_.as[ProgressToken].toOption)
-    def relatesTo: Option[RequestId] = m("relatesTo").flatMap(_.as[RequestId].toOption)
+    def progressToken: Option[ProgressToken] = m(Key.ProgressToken).flatMap(_.as[ProgressToken].toOption)
     def get(key: String): Option[Json] = m(key)
+    def getAs[A: Decoder](key: String): Option[Either[DecodingFailure, A]] = m(key).map(_.as[A])
+    def add(key: String, value: Json): Meta = m.add(key, value)
+    def remove(key: String): Meta = m.remove(key)
+    def isEmpty: Boolean = m.isEmpty
     def asJsonObject: JsonObject = m
   given Decoder[Meta] = Decoder[Option[JsonObject]].map(_.getOrElse(JsonObject.empty))
   given Encoder[Meta] = Encoder[Option[JsonObject]].contramap(o => if o.isEmpty then None else Some(o))
@@ -62,356 +97,249 @@ enum Role:
   case Assistant
 
 object Role:
-  given Encoder[Role] = Encoder.instance {
-    case User      => "user".asJson
-    case Assistant => "assistant".asJson
-  }
-  given Decoder[Role] = Decoder.instance { c =>
-    c.as[String].flatMap {
-      case "user"      => Right(User)
-      case "assistant" => Right(Assistant)
-      case other       => Left(io.circe.DecodingFailure(s"Unknown role: $other", c.history))
-    }
-  }
+  given Codec[Role] = stringEnumCodec("role", "user" -> User, "assistant" -> Assistant)
 
 type Cursor = String
 
+/** A json schema (an object). */
 type JsonSchema = JsonObject
 
+enum IconTheme:
+  case Light
+  case Dark
+object IconTheme:
+  given Codec[IconTheme] = stringEnumCodec("icon theme", "light" -> Light, "dark" -> Dark)
+
+case class Icon(
+  src: String,
+  mimeType: Option[String] = None,
+  sizes: Option[List[String]] = None,
+  theme: Option[IconTheme] = None,
+)
+object Icon:
+  given Codec.AsObject[Icon] = ConfiguredCodec.derived[Icon].withoutNulls
+
+/** Name and version of a client or server. */
+case class Implementation(
+  name: String,
+  version: String,
+  title: Option[String] = None,
+  description: Option[String] = None,
+  websiteUrl: Option[String] = None,
+  icons: Option[List[Icon]] = None,
+)
+object Implementation:
+  given Codec.AsObject[Implementation] = ConfiguredCodec.derived[Implementation].withoutNulls
+
+case class Annotations(
+  audience: Option[List[Role]] = None,
+  priority: Option[Double] = None,
+  lastModified: Option[Instant] = None,
+)
+object Annotations:
+  given Codec.AsObject[Annotations] = ConfiguredCodec.derived[Annotations].withoutNulls
+
 enum Content:
-  case Text(text: String, annotations: Option[Resource.Annotations] = None, _meta: Meta = Meta.empty)
+  case Text(text: String, annotations: Option[Annotations] = None, _meta: Meta = Meta.empty)
   case Image(
     data: Array[Byte],
     mimeType: String,
-    annotations: Option[Resource.Annotations] = None,
+    annotations: Option[Annotations] = None,
     _meta: Meta = Meta.empty,
   )
   case Audio(
     data: Array[Byte],
     mimeType: String,
-    annotations: Option[Resource.Annotations] = None,
+    annotations: Option[Annotations] = None,
     _meta: Meta = Meta.empty,
   )
   case ResourceLink(
     uri: String,
-    name: Option[String],
-    description: Option[String],
-    mimeType: Option[String],
-    size: Option[Long],
-    annotations: Option[Resource.Annotations] = None,
+    name: String,
+    title: Option[String] = None,
+    description: Option[String] = None,
+    mimeType: Option[String] = None,
+    size: Option[Long] = None,
+    annotations: Option[Annotations] = None,
+    icons: Option[List[Icon]] = None,
     _meta: Meta = Meta.empty,
   )
   case EmbeddedResource(
-    resource: Resource.Embedded,
-    annotations: Option[Resource.Annotations] = None,
+    resource: Resource.Contents,
+    annotations: Option[Annotations] = None,
     _meta: Meta = Meta.empty,
   )
 
 object Content:
   given Encoder[Content] = Encoder.instance {
-    case Text(text, annotations, _meta) => Json.obj(
+    case Text(text, annotations, _meta) => obj(
         "type" -> "text".asJson,
         "text" -> text.asJson,
         "annotations" -> annotations.asJson,
         "_meta" -> _meta.asJson,
-      )
+      ).asJson
 
-    case Image(data, mimeType, annotations, _meta) => Json.obj(
+    case Image(data, mimeType, annotations, _meta) => obj(
         "type" -> "image".asJson,
         "data" -> Base64.getEncoder.encodeToString(data).asJson,
         "mimeType" -> mimeType.asJson,
         "annotations" -> annotations.asJson,
         "_meta" -> _meta.asJson,
-      )
+      ).asJson
 
-    case Audio(data, mimeType, annotations, _meta) => Json.obj(
+    case Audio(data, mimeType, annotations, _meta) => obj(
         "type" -> "audio".asJson,
         "data" -> Base64.getEncoder.encodeToString(data).asJson,
         "mimeType" -> mimeType.asJson,
         "annotations" -> annotations.asJson,
         "_meta" -> _meta.asJson,
-      )
+      ).asJson
 
-    case ResourceLink(uri, name, description, mimeType, size, annotations, _meta) => Json.obj(
+    case ResourceLink(uri, name, title, description, mimeType, size, annotations, icons, _meta) => obj(
         "type" -> "resource_link".asJson,
         "uri" -> uri.asJson,
         "name" -> name.asJson,
+        "title" -> title.asJson,
         "description" -> description.asJson,
         "mimeType" -> mimeType.asJson,
         "size" -> size.asJson,
         "annotations" -> annotations.asJson,
+        "icons" -> icons.asJson,
         "_meta" -> _meta.asJson,
-      )
+      ).asJson
 
-    case EmbeddedResource(resource, annotations, _meta) => Json.obj(
+    case EmbeddedResource(resource, annotations, _meta) => obj(
         "type" -> "resource".asJson,
         "resource" -> resource.asJson,
         "annotations" -> annotations.asJson,
         "_meta" -> _meta.asJson,
-      )
+      ).asJson
   }
 
-private def base64Decoder: Decoder[Array[Byte]] =
-  Decoder.decodeString.emap(str => Try(Base64.getDecoder.decode(str)).toEither.left.map(_ => s"Invalid base64"))
+  private val base64Decoder: Decoder[Array[Byte]] =
+    Decoder.decodeString.emap(str => Try(Base64.getDecoder.decode(str)).toEither.left.map(_ => "Invalid base64"))
 
-given Decoder[Content] = Decoder.instance { c =>
-  c.downField("type").as[String].flatMap {
-    case "text" =>
-      for
-        text <- c.downField("text").as[String]
-        annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-      yield Content.Text(text, annotations, _meta)
+  given Decoder[Content] = Decoder.instance { c =>
+    c.downField("type").as[String].flatMap {
+      case "text" =>
+        for
+          text <- c.downField("text").as[String]
+          annotations <- c.downField("annotations").as[Option[Annotations]]
+          _meta <- c.downField("_meta").as[Meta]
+        yield Content.Text(text, annotations, _meta)
 
-    case "image" =>
-      for
-        data <- c.downField("data").as[Array[Byte]](using base64Decoder)
-        mimeType <- c.downField("mimeType").as[String]
-        annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-      yield Content.Image(data, mimeType, annotations, _meta)
+      case "image" =>
+        for
+          data <- c.downField("data").as[Array[Byte]](using base64Decoder)
+          mimeType <- c.downField("mimeType").as[String]
+          annotations <- c.downField("annotations").as[Option[Annotations]]
+          _meta <- c.downField("_meta").as[Meta]
+        yield Content.Image(data, mimeType, annotations, _meta)
 
-    case "audio" =>
-      for
-        data <- c.downField("data").as[Array[Byte]](using base64Decoder)
-        mimeType <- c.downField("mimeType").as[String]
-        annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-      yield Content.Audio(data, mimeType, annotations, _meta)
+      case "audio" =>
+        for
+          data <- c.downField("data").as[Array[Byte]](using base64Decoder)
+          mimeType <- c.downField("mimeType").as[String]
+          annotations <- c.downField("annotations").as[Option[Annotations]]
+          _meta <- c.downField("_meta").as[Meta]
+        yield Content.Audio(data, mimeType, annotations, _meta)
 
-    case "resource_link" =>
-      for
-        uri <- c.downField("uri").as[String]
-        name <- c.downField("name").as[Option[String]]
-        description <- c.downField("description").as[Option[String]]
-        mimeType <- c.downField("mimeType").as[Option[String]]
-        size <- c.downField("size").as[Option[Long]]
-        annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-      yield Content.ResourceLink(uri, name, description, mimeType, size, annotations, _meta)
+      case "resource_link" =>
+        for
+          uri <- c.downField("uri").as[String]
+          name <- c.downField("name").as[String]
+          title <- c.downField("title").as[Option[String]]
+          description <- c.downField("description").as[Option[String]]
+          mimeType <- c.downField("mimeType").as[Option[String]]
+          size <- c.downField("size").as[Option[Long]]
+          annotations <- c.downField("annotations").as[Option[Annotations]]
+          icons <- c.downField("icons").as[Option[List[Icon]]]
+          _meta <- c.downField("_meta").as[Meta]
+        yield Content.ResourceLink(uri, name, title, description, mimeType, size, annotations, icons, _meta)
 
-    case "resource" =>
-      for
-        resource <- c.downField("resource").as[Resource.Embedded]
-        annotations <- c.downField("annotations").as[Option[Resource.Annotations]]
-        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-      yield Content.EmbeddedResource(resource, annotations, _meta)
+      case "resource" =>
+        for
+          resource <- c.downField("resource").as[Resource.Contents]
+          annotations <- c.downField("annotations").as[Option[Annotations]]
+          _meta <- c.downField("_meta").as[Meta]
+        yield Content.EmbeddedResource(resource, annotations, _meta)
 
-    case other =>
-      Left(io.circe.DecodingFailure(s"Unknown content type: $other", c.history))
+      case other =>
+        Left(DecodingFailure(s"Unknown content type: $other", c.history))
+    }
   }
-}
 
 case class Resource(
   uri: String,
   name: String,
-  title: Option[String],
-  description: Option[String],
-  mimeType: Option[String],
-  size: Option[Long],
-  annotations: Option[Resource.Annotations] = None,
+  title: Option[String] = None,
+  description: Option[String] = None,
+  mimeType: Option[String] = None,
+  size: Option[Long] = None,
+  annotations: Option[Annotations] = None,
+  icons: Option[List[Icon]] = None,
   _meta: Meta = Meta.empty,
 )
 
 object Resource:
-  given Encoder.AsObject[Resource] = Encoder.AsObject.instance { resource =>
-    JsonObject(
-      "uri" -> resource.uri.asJson,
-      "name" -> resource.name.asJson,
-      "title" -> resource.title.asJson,
-      "description" -> resource.description.asJson,
-      "mimeType" -> resource.mimeType.asJson,
-      "size" -> resource.size.asJson,
-      "annotations" -> resource.annotations.asJson,
-      "_meta" -> resource._meta.asJson,
-    )
-  }
-  given Decoder[Resource] = Decoder.instance { c =>
-    for
-      uri <- c.downField("uri").as[String]
-      name <- c.downField("name").as[String]
-      title <- c.downField("title").as[Option[String]]
-      description <- c.downField("description").as[Option[String]]
-      mimeType <- c.downField("mimeType").as[Option[String]]
-      size <- c.downField("size").as[Option[Long]]
-      annotations <- c.downField("annotations").as[Option[Annotations]]
-      _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-    yield Resource(uri, name, title, description, mimeType, size, annotations, _meta)
-  }
-
-  enum Embedded:
-    case Text(uri: String, title: Option[String], mimeType: Option[String], text: String)
-    case Blob(uri: String, title: Option[String], mimeType: Option[String], blob: String)
-    def uri: String
-    def title: Option[String]
-    def mimeType: Option[String]
-
-  object Embedded:
-    given Encoder[Embedded] = Encoder.instance {
-      case Text(uri, title, mimeType, text) =>
-        JsonObject(
-          "uri" -> uri.asJson,
-          "title" -> title.asJson,
-          "mimeType" -> mimeType.asJson,
-          "text" -> text.asJson,
-        ).asJson
-      case Blob(uri, title, mimeType, blob) =>
-        JsonObject(
-          "uri" -> uri.asJson,
-          "title" -> title.asJson,
-          "mimeType" -> mimeType.asJson,
-          "blob" -> blob.asJson,
-        ).asJson
-    }
-
-    given Decoder[Embedded] = Decoder.instance { c =>
-      // Try to decode as Text first (has text field)
-      c.downField("text").as[String].map { text =>
-        for
-          uri <- c.downField("uri").as[String]
-          title <- c.downField("title").as[Option[String]]
-          mimeType <- c.downField("mimeType").as[Option[String]]
-        yield Text(uri, title, mimeType, text)
-      }.getOrElse {
-        // If no text field, try as Blob
-        for
-          uri <- c.downField("uri").as[String]
-          title <- c.downField("title").as[Option[String]]
-          mimeType <- c.downField("mimeType").as[Option[String]]
-          blob <- c.downField("blob").as[String]
-        yield Blob(uri, title, mimeType, blob)
-      }
-    }
+  given Codec.AsObject[Resource] = ConfiguredCodec.derived[Resource].withoutNulls
 
   case class Template(
     uriTemplate: String,
     name: String,
-    title: Option[String],
-    description: Option[String],
-    mimeType: Option[String],
-    annotations: Option[Resource.Annotations] = None,
+    title: Option[String] = None,
+    description: Option[String] = None,
+    mimeType: Option[String] = None,
+    annotations: Option[Annotations] = None,
+    icons: Option[List[Icon]] = None,
     _meta: Meta = Meta.empty,
   )
   object Template:
-    given Encoder.AsObject[Template] = Encoder.AsObject.instance { template =>
-      JsonObject(
-        "uriTemplate" -> template.uriTemplate.asJson,
-        "name" -> template.name.asJson,
-        "title" -> template.title.asJson,
-        "description" -> template.description.asJson,
-        "mimeType" -> template.mimeType.asJson,
-        "annotations" -> template.annotations.asJson,
-        "_meta" -> template._meta.asJson,
-      )
-    }
-    given Decoder[Template] = Decoder.instance { c =>
-      for
-        uriTemplate <- c.downField("uriTemplate").as[String]
-        name <- c.downField("name").as[String]
-        title <- c.downField("title").as[Option[String]]
-        description <- c.downField("description").as[Option[String]]
-        mimeType <- c.downField("mimeType").as[Option[String]]
-        annotations <- c.downField("annotations").as[Option[Annotations]]
-        _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-      yield Template(uriTemplate, name, title, description, mimeType, annotations, _meta)
-    }
+    given Codec.AsObject[Template] = ConfiguredCodec.derived[Template].withoutNulls
 
-  case class Annotations(
-    audience: Option[List[Role]],
-    priority: Option[Double],
-    lastModified: Option[Instant],
-  )
-
-  object Annotations:
-    given Encoder[Annotations] = Encoder.instance { ann =>
-      JsonObject(
-        "audience" -> ann.audience.asJson,
-        "priority" -> ann.priority.asJson,
-        "lastModified" -> ann.lastModified.asJson,
-      ).asJson
-    }
-
-    given Decoder[Annotations] = Decoder.instance { c =>
-      for
-        audience <- c.downField("audience").as[Option[List[Role]]]
-        priority <- c.downField("priority").as[Option[Double]]
-        lastModified <- c.downField("lastModified").as[Option[Instant]]
-      yield Annotations(audience, priority, lastModified)
-    }
-
+  /** Contents of a resource (text or binary). */
   enum Contents:
     case Text(uri: String, mimeType: Option[String], text: String, _meta: Meta = Meta.empty)
     case Blob(uri: String, mimeType: Option[String], blob: String, _meta: Meta = Meta.empty)
+    def uri: String
+    def mimeType: Option[String]
 
   object Contents:
     given Encoder[Contents] = Encoder.instance {
-      case Text(uri, mimeType, text, _meta) => Json.obj(
+      case Text(uri, mimeType, text, _meta) => obj(
           "uri" -> uri.asJson,
           "mimeType" -> mimeType.asJson,
           "text" -> text.asJson,
           "_meta" -> _meta.asJson,
-        )
-      case Blob(uri, mimeType, blob, _meta) => Json.obj(
+        ).asJson
+      case Blob(uri, mimeType, blob, _meta) => obj(
           "uri" -> uri.asJson,
           "mimeType" -> mimeType.asJson,
           "blob" -> blob.asJson,
           "_meta" -> _meta.asJson,
-        )
+        ).asJson
     }
 
     given Decoder[Contents] = Decoder.instance { c =>
-      // Try to decode as Text first (has text field)
-      c.downField("text").as[String].map { text =>
-        for
-          uri <- c.downField("uri").as[String]
-          mimeType <- c.downField("mimeType").as[Option[String]]
-          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-        yield Text(uri, mimeType, text, _meta)
-      }.getOrElse {
-        // If no text field, try as Blob
-        for
-          uri <- c.downField("uri").as[String]
-          mimeType <- c.downField("mimeType").as[Option[String]]
-          blob <- c.downField("blob").as[String]
-          _meta <- c.downField("_meta").as[Option[Meta]].map(_.getOrElse(Meta.empty))
-        yield Blob(uri, mimeType, blob, _meta)
-      }
+      for
+        uri <- c.downField("uri").as[String]
+        mimeType <- c.downField("mimeType").as[Option[String]]
+        _meta <- c.downField("_meta").as[Meta]
+        text <- c.downField("text").as[Option[String]]
+        contents <- text match
+          case Some(text) => Right(Text(uri, mimeType, text, _meta))
+          case None       => c.downField("blob").as[String].map(Blob(uri, mimeType, _, _meta))
+      yield contents
     }
 
-enum LoggingLevel extends Ordered[LoggingLevel]:
-  case Debug
-  case Info
-  case Notice
-  case Warning
-  case Error
-  case Critical
-  case Alert
-  case Emergency
+/** Marker for the results of the server. */
+trait McpResponse
 
-  override def compare(that: LoggingLevel): Int = ordinal.compare(that.ordinal)
-end LoggingLevel
-object LoggingLevel:
-  given Encoder[LoggingLevel] = Encoder.instance {
-    case Debug     => "debug".asJson
-    case Info      => "info".asJson
-    case Notice    => "notice".asJson
-    case Warning   => "warning".asJson
-    case Error     => "error".asJson
-    case Critical  => "critical".asJson
-    case Alert     => "alert".asJson
-    case Emergency => "emergency".asJson
-  }
-
-  given Decoder[LoggingLevel] = Decoder.instance { c =>
-    c.as[String].flatMap {
-      case "debug"     => Right(Debug)
-      case "info"      => Right(Info)
-      case "notice"    => Right(Notice)
-      case "warning"   => Right(Warning)
-      case "error"     => Right(Error)
-      case "critical"  => Right(Critical)
-      case "alert"     => Right(Alert)
-      case "emergency" => Right(Emergency)
-      case other       => Left(io.circe.DecodingFailure(s"Unknown logging level: $other", c.history))
-    }
-  }
+/** A result that is complete (`resultType` is "complete" when written, ignored when read). */
+private[protocol] def completeResultCodec[A](codec: ConfiguredCodec[A]): Codec.AsObject[A] =
+  Codec.AsObject.from(
+    codec,
+    Encoder.AsObject.instance(a =>
+      codec.encodeObject(a).filter(!_._2.isNull).add("resultType", "complete".asJson)
+    ),
+  )
