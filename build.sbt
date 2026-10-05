@@ -11,7 +11,7 @@ lazy val root = (project in file("."))
     inThisBuild(List(
       Global / onChangedBuildSource := ReloadOnSourceChanges,
       usePipelining := false,
-      scalacOptions += "-source:3.7",
+      scalacOptions += "-source:3.10",
       scalacOptions += "-unchecked",
       scalacOptions += "-deprecation",
       scalacOptions += "-feature",
@@ -48,7 +48,7 @@ lazy val root = (project in file("."))
         "org.typelevel" %% "cats-effect-testing-scalatest" % Dependencies.catsEffectTesting,
         "org.scalatest" %% "scalatest" % Dependencies.scalatest,
         "org.scalacheck" %% "scalacheck" % Dependencies.scalacheck,
-        "org.scalatestplus" %% "scalacheck-1-16" % Dependencies.scalatestScalacheck ,
+        "org.scalatestplus" %% "scalacheck-1-20" % Dependencies.scalatestScalacheck,
       ).map(_ % Test),
       publish := {},
     )),
@@ -150,7 +150,6 @@ lazy val exampleSimpleEcho = (project in file("example/simple-echo"))
     assembly / aggregate := true,
     assembly / mainClass := Some("ch.linkyard.mcp.example.simpleEcho.SimpleEchoServer"),
     assembly / assemblyJarName := "echo.jar",
-    assembly / test := {},
 
     libraryDependencies ++= Dependencies.logBinding,
   )
@@ -164,7 +163,6 @@ lazy val exampleSimpleAuthenticated = (project in file("example/simple-authentic
     assembly / aggregate := true,
     assembly / mainClass := Some("ch.linkyard.mcp.example.simpleAuthenticated.SimpleAuthenticatedServer"),
     assembly / assemblyJarName := "simple-authenticated.jar",
-    assembly / test := {},
     publish / skip := true,
     libraryDependencies ++= Seq(
       "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
@@ -181,7 +179,6 @@ lazy val exampleDemo = (project in file("example/demo"))
     assembly / aggregate := true,
     assembly / mainClass := Some("ch.linkyard.mcp.example.demo.StdioDemoMcpServer"),
     assembly / assemblyJarName := "demo.jar",
-    assembly / test := {},
     publish / skip := true,
     libraryDependencies ++= Dependencies.logBinding,
   )
@@ -194,7 +191,6 @@ lazy val exampleDemoHttp = (project in file("example/demo-http"))
     assembly / aggregate := true,
     assembly / mainClass := Some("ch.linkyard.mcp.example.demo.HttpDemoMcpServer"),
     assembly / assemblyJarName := "demo-http.jar",
-    assembly / test := {},
     publish / skip := true,
     libraryDependencies ++= Seq(
       "org.http4s" %% "http4s-ember-server" % Dependencies.http4s,
