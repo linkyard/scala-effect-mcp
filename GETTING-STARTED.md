@@ -5,7 +5,7 @@ This guide walks you through creating a minimal MCP server with a single tool, r
 ## Prerequisites
 
 - [SBT](https://www.scala-sbt.org/) (Scala build tool)
-- Java 11 or later
+- Java 17 or later
 
 ## 1. Add Dependencies
 
@@ -22,7 +22,7 @@ You also need a JSON codec deriver and a JSON schema deriver. The examples use [
 
 ```scala
 libraryDependencies ++= Seq(
-  "io.circe"       %% "circe-generic"    % "0.14.15",
+  "io.circe"       %% "circe-generic"    % "0.14.16",
   "com.melvinlow"  %% "scala-json-schema" % "0.2.0",
 )
 ```
@@ -117,7 +117,7 @@ sbt assembly
 Test with the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector):
 
 ```bash
-npx @modelcontextprotocol/inspector java -jar target/scala-3.8.1/your-server-assembly.jar
+npx @modelcontextprotocol/inspector java -jar target/scala-3.10.0/your-server-assembly.jar
 ```
 
 Or configure your MCP client (e.g., Claude Desktop, Cursor) to launch your server:

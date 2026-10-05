@@ -69,7 +69,7 @@ npx @modelcontextprotocol/inspector <command>
 
 2. **Launch the Inspector with your server:**
    ```bash
-   npx @modelcontextprotocol/inspector java -jar target/scala-3.8.1/your-server-assembly-0.1.0.jar
+   npx @modelcontextprotocol/inspector java -jar target/scala-3.10.0/your-server-assembly-0.1.0.jar
    ```
 
 3. **Verify connectivity and capabilities:**
