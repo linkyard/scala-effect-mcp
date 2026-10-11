@@ -235,11 +235,14 @@ class ModernHandlerSpec extends AnyFunSpec with Matchers with OptionValues with 
         ).result
         result("isError") shouldBe Some(Json.True)
         result.asJson.noSpaces should include("Invalid arguments")
+        result.asJson.noSpaces should include("a")
       }
 
       it("should report missing arguments as error of the tool call") {
         val result = withFixture(f => call(f, 1, "tools/call", "name" -> "add".asJson)).result
         result("isError") shouldBe Some(Json.True)
+        result.asJson.noSpaces should include("Invalid arguments")
+        result.asJson.noSpaces should include("a")
       }
 
       it("should report the failure of a tool as error of the tool call") {

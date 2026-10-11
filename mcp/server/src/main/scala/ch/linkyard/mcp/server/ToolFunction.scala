@@ -110,7 +110,7 @@ object ToolFunction:
         }
       case Left(error) =>
         Outcome.Complete(CallTool.Response.Error(
-          List(Content.Text(s"Invalid arguments: ${error.message}")),
+          List(Content.Text(s"Invalid arguments: ${error.getMessage}")),
           None,
         )).pure[F].widen
   end handleParsedArgs
